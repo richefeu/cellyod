@@ -158,7 +158,7 @@ struct App {
   Rectangle view{};
   double zoom{10.0};
   V center;
-  bool showSeeds{true}, showEdges{true};
+  bool showSeeds{true}, showEdges{true}, showBundles{true};
   bool dark{false}; // thème de la vue : blanc sur noir (défaut : noir sur blanc)
   int colorField{0};
   bool dragging{false};
@@ -178,7 +178,7 @@ struct App {
   char svgFile[256]{"cells.svg"};
   char pngFile[256]{"cells.png"};
   char paramsFile[256]{"cells_params.txt"};
-  bool svgSeeds{true}, svgLegend{true}, svgDark{false};
+  bool svgSeeds{true}, svgBundles{true}, svgDark{false};
   int svgWidth{1000};
   std::string capturePending; // capture PNG de la vue à faire à la prochaine image
   std::string message;
@@ -360,7 +360,7 @@ static void exportSVG(const std::string &f, bool dark) {
     SvgOptions so;
     so.widthPx = std::max(100, a.svgWidth);
     so.seeds = a.svgSeeds;
-    so.legend = a.svgLegend;
+    so.bundles = a.svgBundles;
     so.dark = dark;
     writeSVG(f, a.T, a.M, so);
     say("SVG exporté : " + f);
@@ -487,30 +487,25 @@ static void drawTissue() {
   if (a.showSeeds) {
     float r = (float)std::clamp(0.07 * a.zoom, 1.0, 6.0);
     for (size_t i = 0; i < a.T.seeds.size(); i++) {
-      if (a.T.inside(i) && !a.T.isBundle[i]) {
+      if (a.T.inside(i) && !(a.showBundles && a.T.isBundle[i])) {
         DrawCircleV(toScreen(a.T.seeds[i]), r, col(theme().seedRing));
         DrawCircleV(toScreen(a.T.seeds[i]), 0.7f * r, col(theme().seed));
       }
     }
   }
-  // les bundles restent toujours repérés
-  float rb = (float)std::clamp(0.22 * a.zoom, 2.0, 16.0);
-  for (size_t i = 0; i < a.T.seeds.size(); i++) {
-    if (a.T.inside(i) && a.T.isBundle[i]) {
-      DrawCircleV(toScreen(a.T.seeds[i]), rb, col(theme().bundle));
+  if (a.showBundles) {
+    float rb = (float)std::clamp(0.22 * a.zoom, 2.0, 16.0);
+    for (size_t i = 0; i < a.T.seeds.size(); i++) {
+      if (a.T.inside(i) && a.T.isBundle[i]) {
+        DrawCircleV(toScreen(a.T.seeds[i]), rb, col(theme().bundle));
+      }
     }
   }
 
-  // légende
+  // échelle de couleur des champs de coloration
   const ColorField &f = COLOR_FIELDS[a.colorField];
   float lx = a.view.x + 12, ly = a.view.y + a.view.height - 34;
-  if (!f.value && a.MT.nBundles > 0) {
-    float bx = a.view.x + a.view.width - 136, by = a.view.y + a.view.height - 44;
-    DrawRectangleRounded({bx, by, 120, 30}, 0.2f, 4, col(theme().background));
-    DrawRectangleRoundedLinesEx({bx, by, 120, 30}, 0.2f, 4, 1.5f, col(theme().text));
-    DrawRectangle((int)bx + 10, (int)by + 9, 28, 13, col(theme().bundle));
-    uiText("Bundles", bx + 46, by + 5, 18, col(theme().text));
-  } else if (f.value && f.discrete) {
+  if (f.value && f.discrete) {
     DrawRectangle((int)lx - 6, (int)ly - 6, 7 * 34 + 12, 32, col(theme().background, 0.85f));
     for (int n = 3; n <= 9; n++) {
       float x = lx + (n - 3) * 34;
@@ -940,7 +935,8 @@ static void drawPanel(float W, float H) {
     }
     Rectangle cb = c.row(16, 8);
     GuiCheckBox({cb.x, cb.y, 16, 16}, "Germes", &a.showSeeds);
-    GuiCheckBox({cb.x + cb.width / 2, cb.y, 16, 16}, "Parois", &a.showEdges);
+    GuiCheckBox({cb.x + cb.width / 3, cb.y, 16, 16}, "Bundles", &a.showBundles);
+    GuiCheckBox({cb.x + 2 * cb.width / 3, cb.y, 16, 16}, "Parois", &a.showEdges);
     Rectangle tr = c.row(bh, 8);
     int themeIdx = a.dark ? 1 : 0;
     GuiToggleGroup({tr.x, tr.y, (tr.width - 2) / 2, bh}, "Noir sur blanc;Blanc sur noir", &themeIdx);
@@ -1031,7 +1027,7 @@ static void drawFilesPopup() {
   {
     Rectangle o = c.row(bh, 6);
     GuiCheckBox({o.x, o.y + 4, 16, 16}, "Germes", &a.svgSeeds);
-    GuiCheckBox({o.x + 110, o.y + 4, 16, 16}, "Légende", &a.svgLegend);
+    GuiCheckBox({o.x + 110, o.y + 4, 16, 16}, "Bundles", &a.svgBundles);
     GuiLabel({o.x + 230, o.y, 110, bh}, "Largeur (px)");
     if (GuiValueBox({o.x + o.width - 100, o.y, 100, bh}, nullptr, &a.svgWidth, 100, 20000,
                     a.editing == EDIT_SVG_WIDTH)) {
@@ -1164,7 +1160,8 @@ static void loadConfig() {
   app.speed = std::max(1, rini_get_value_fallback(ini, "speed", app.speed));
   app.stopAtTarget = rini_get_value_fallback(ini, "stop_at_target", app.stopAtTarget) != 0;
   app.svgSeeds = rini_get_value_fallback(ini, "svg_seeds", app.svgSeeds) != 0;
-  app.svgLegend = rini_get_value_fallback(ini, "svg_legend", app.svgLegend) != 0;
+  app.svgBundles = rini_get_value_fallback(ini, "svg_bundles", app.svgBundles) != 0;
+  app.showBundles = rini_get_value_fallback(ini, "show_bundles", app.showBundles) != 0;
   app.svgWidth = rini_get_value_fallback(ini, "svg_width", app.svgWidth);
   for (const std::string &id : foldIds()) {
     app.folded[id] = rini_get_value_fallback(ini, ("fold_" + id).c_str(), 0) != 0;
@@ -1185,7 +1182,8 @@ static void saveConfig() {
   rini_set_value(&ini, "speed", app.speed, "Itérations par image");
   rini_set_value(&ini, "stop_at_target", app.stopAtTarget, "Arrêt à lloydIterations (0/1)");
   rini_set_value(&ini, "svg_seeds", app.svgSeeds, "Export SVG : germes (0/1)");
-  rini_set_value(&ini, "svg_legend", app.svgLegend, "Export SVG : légende (0/1)");
+  rini_set_value(&ini, "svg_bundles", app.svgBundles, "Export SVG : bundles (0/1)");
+  rini_set_value(&ini, "show_bundles", app.showBundles, "Afficher les bundles (0/1)");
   rini_set_value(&ini, "svg_width", app.svgWidth, "Export SVG : largeur (px)");
   for (const std::string &id : foldIds()) {
     rini_set_value(&ini, ("fold_" + id).c_str(), app.folded[id], "Section repliée (0/1)");

@@ -190,12 +190,12 @@ void setParam(Params &p, const std::string &key, const std::string &value) {
       throw std::runtime_error("bundle : deux coordonnées attendues");
     }
     p.bundleAt.push_back(b);
-  } else if (key == "svgSeeds" || key == "svgLegend") {
+  } else if (key == "svgSeeds" || key == "svgBundles") {
     int v;
     if (!(is >> v)) {
       throw std::runtime_error(key + " : 0 ou 1 attendu");
     }
-    (key == "svgSeeds" ? p.svgSeeds : p.svgLegend) = v != 0;
+    (key == "svgSeeds" ? p.svgSeeds : p.svgBundles) = v != 0;
   } else if (key == "svgTheme") {
     std::string v;
     is >> v;
@@ -279,7 +279,7 @@ void printParamHelp(std::ostream &os) {
         "  bundle x y\n      bundle imposé : germe le plus proche du point (répétable)\n"
         "  output fichier (défaut cells.txt)\n      fichier de cellules produit\n"
         "  svg fichier (défaut cells.svg)\n      vue SVG produite (none : pas de SVG)\n"
-        "  svgSeeds 0|1, svgLegend 0|1 (défaut 1)\n      SVG : germes, légende des bundles\n"
+        "  svgSeeds 0|1, svgBundles 0|1 (défaut 1)\n      SVG : afficher les germes, les bundles\n"
         "  svgTheme light|dark (défaut light)\n      SVG : noir sur blanc ou blanc sur noir\n"
         "  morphology fichier\n      ajoute une ligne de métriques morphologiques au fichier\n";
 }

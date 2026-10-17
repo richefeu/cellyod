@@ -136,7 +136,7 @@ static std::string svgColor(uint32_t c) {
   return buf;
 }
 
-// Rendu selon le thème (theme.hpp) : parois et bord du tissu, germes cerclés, bundles en rouge
+// Rendu selon le thème (theme.hpp) : parois et bord du tissu, germes cerclés, bundles en rouge (optionnels)
 void writeSVG(const std::string &file, const Tissue &t, const CellMesh &m, const SvgOptions &opt) {
   std::ofstream os(file);
   if (!os) {
@@ -178,32 +178,22 @@ void writeSVG(const std::string &file, const Tissue &t, const CellMesh &m, const
   if (opt.seeds) {
     os << "<g fill=\"" << svgColor(th.seed) << "\" stroke=\"" << svgColor(th.seedRing) << "\" stroke-width=\"" << f(0.4 * rs) << "\">\n";
     for (size_t i = 0; i < t.seeds.size(); i++) {
-      if (t.inside(i) && !t.isBundle[i]) {
+      if (t.inside(i) && !(opt.bundles && t.isBundle[i])) {
         os << "<circle cx=\"" << f(X(t.seeds[i].x)) << "\" cy=\"" << f(Y(t.seeds[i].y)) << "\" r=\"" << f(rs)
            << "\"/>\n";
       }
     }
     os << "</g>\n";
   }
-  os << "<g fill=\"" << svgColor(th.bundle) << "\">\n";
-  for (size_t i = 0; i < t.seeds.size(); i++) {
-    if (t.inside(i) && t.isBundle[i]) {
-      os << "<circle cx=\"" << f(X(t.seeds[i].x)) << "\" cy=\"" << f(Y(t.seeds[i].y)) << "\" r=\"" << f(rb)
-         << "\"/>\n";
+  if (opt.bundles) {
+    os << "<g fill=\"" << svgColor(th.bundle) << "\">\n";
+    for (size_t i = 0; i < t.seeds.size(); i++) {
+      if (t.inside(i) && t.isBundle[i]) {
+        os << "<circle cx=\"" << f(X(t.seeds[i].x)) << "\" cy=\"" << f(Y(t.seeds[i].y)) << "\" r=\"" << f(rb)
+           << "\"/>\n";
+      }
     }
-  }
-  os << "</g>\n";
-  if (opt.legend && t.nBundles() > 0) {
-    const double fs = std::max(12.0, 0.022 * opt.widthPx), lw = 6.8 * fs, lh = 1.8 * fs;
-    const double lx = opt.widthPx - lw - fs, ly = H - lh - fs;
-    os << "<g font-family=\"sans-serif\" font-size=\"" << f(fs) << "\">\n"
-       << "<rect x=\"" << f(lx) << "\" y=\"" << f(ly) << "\" width=\"" << f(lw) << "\" height=\"" << f(lh)
-       << "\" rx=\"" << f(0.25 * fs) << "\" fill=\"" << svgColor(th.background) << "\" stroke=\"" << svgColor(th.text)
-       << "\" stroke-width=\"1.5\"/>\n"
-       << "<rect x=\"" << f(lx + 0.5 * fs) << "\" y=\"" << f(ly + 0.5 * fs) << "\" width=\"" << f(1.6 * fs)
-       << "\" height=\"" << f(0.8 * fs) << "\" fill=\"" << svgColor(th.bundle) << "\"/>\n"
-       << "<text x=\"" << f(lx + 2.6 * fs) << "\" y=\"" << f(ly + 1.25 * fs) << "\" fill=\"" << svgColor(th.text) << "\">Bundles</text>\n"
-       << "</g>\n";
+    os << "</g>\n";
   }
   os << "</svg>\n";
 }

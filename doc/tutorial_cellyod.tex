@@ -564,11 +564,11 @@ relançant \cy{} avec des paramètres différents et le même fichier (section~\
 \subsection{SVG}
 
 Vue vectorielle du tissu, dans le même style que l'interface : parois fines, bord du tissu épais, germes gris
-cerclés, bundles en rouge, légende. Deux thèmes : \code{svgTheme light} (défaut, noir sur blanc : cellules blanches,
+cerclés, bundles en rouge. Deux thèmes : \code{svgTheme light} (défaut, noir sur blanc : cellules blanches,
 parois noires) et \code{svgTheme dark} (blanc sur noir : cellules sombres sur fond noir, parois blanches) ; les
 couleurs des deux thèmes sont définies dans \code{src/theme.hpp}, commun au SVG et à l'interface.
 \code{svgSeeds 0} retire les germes,
-\code{svgLegend 0} la légende ; \code{svg none} supprime le fichier. Un SVG s'ouvre dans un navigateur (zoom
+\code{svgBundles 0} les bundles (leurs germes sont alors tracés comme les autres) ; \code{svg none} supprime le fichier. Un SVG s'ouvre dans un navigateur (zoom
 illimité) et se convertit en PNG avec Inkscape :
 \code{inkscape cells.svg --export-type=png -w 2000}.
 
@@ -605,7 +605,7 @@ qu'on règle.
     suivante (section~\ref{sec:effets}).
   \item \emph{Affichage} : \emph{Uni} (rendu de la figure~\ref{fig:gui}), ou coloration par nombre de côtés
     (palette discrète ; les cellules de bord sont estompées), par aire ou par indice de forme (palette continue,
-    échelle min--max affichée) ; germes et parois ; thème \emph{Noir sur blanc} (défaut) ou \emph{Blanc sur noir} (touche T), appliqué
+    échelle min--max affichée) ; affichage ou non des germes, des bundles et des parois ; thème \emph{Noir sur blanc} (défaut) ou \emph{Blanc sur noir} (touche T), appliqué
     aussi au SVG écrit par \emph{Enregistrer} ; \emph{Recadrer} (F).
   \item \emph{Métriques} : valeurs courantes ; un clic sur une métrique trace son évolution en fonction de
     l'itération depuis la dernière régénération ; histogramme du nombre de côtés.
@@ -617,7 +617,7 @@ fermer).
 \begin{itemize}
   \item \emph{Fichiers\dots} (touche E, figure~\ref{fig:guifiles}) : nom du fichier de cellules, \emph{Enregistrer les
     cellules} et \emph{Charger} (fichier de cellules ou de paramètres ; un fichier peut aussi être glissé-déposé
-    dans la fenêtre) ; export SVG avec son nom, l'affichage des germes et de la légende, la largeur en pixels et le
+    dans la fenêtre) ; export SVG avec son nom, l'affichage des germes et des bundles, la largeur en pixels et le
     thème (initialisé à celui de la vue) ; capture PNG de la vue telle qu'affichée ; export des paramètres. Les noms
     d'export sont déduits du fichier de cellules à l'ouverture de la fenêtre. Ctrl+S enregistre directement le
     fichier de cellules et le SVG de même nom, au thème de la vue ;

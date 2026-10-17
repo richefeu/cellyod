@@ -28,7 +28,7 @@ Tissue loadCells(const std::string &file);
 struct SvgOptions {
   double widthPx{1000.0};
   bool seeds{true};
-  bool legend{true};
+  bool bundles{true}; // bundles repérés (sinon : germes ordinaires)
   bool dark{false}; // blanc sur noir (défaut : noir sur blanc), cf. theme.hpp
 };
 void writeSVG(const std::string &file, const Tissue &t, const CellMesh &m, const SvgOptions &opt = {});

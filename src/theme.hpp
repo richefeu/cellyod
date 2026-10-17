@@ -12,7 +12,7 @@ struct Theme {
   uint32_t seed;       // germes
   uint32_t seedRing;   // contour des germes
   uint32_t bundle;     // bundles
-  uint32_t text;       // légende
+  uint32_t text;       // textes (échelles de couleur de l'interface)
 };
 
 inline const Theme &renderTheme(bool dark) {

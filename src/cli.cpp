@@ -56,7 +56,7 @@ int main(int argc, char *argv[]) {
     if (!P.svg.empty() && P.svg != "none") {
       SvgOptions so;
       so.seeds = P.svgSeeds;
-      so.legend = P.svgLegend;
+      so.bundles = P.svgBundles;
       so.dark = P.svgDark;
       writeSVG(P.svg, t, m, so);
     }

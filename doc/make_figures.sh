@@ -12,7 +12,7 @@ png() { inkscape "$1" --export-type=png --export-filename="$2" -w "$3" > /dev/nu
 # vignette : nom, puis paires clé=valeur passées à cellyod
 fig() {
   local name=$1; shift
-  $C svgLegend=0 output=work/$name.txt svg=work/$name.svg "$@" > work/$name.log
+  $C output=work/$name.txt svg=work/$name.svg "$@" > work/$name.log
   png work/$name.svg figures/$name.png ${W:-500}
 }
 

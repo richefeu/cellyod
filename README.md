@@ -81,7 +81,7 @@ Le tissu évolue en direct, itération par itération. Le panneau de droite est 
   L'aide d'un paramètre s'affiche dans la barre d'état quand la souris le survole. L'expression `shape` se
   saisit dans un champ (Entrée pour valider ; une expression invalide est signalée dans la barre d'état) ;
 - **Affichage** : rendu uniforme (parois, germes gris cerclés, bundles en rouge, comme le SVG), ou coloration
-  par nombre de côtés, par aire ou par indice de forme ; germes et parois ; thème **noir sur blanc** (défaut)
+  par nombre de côtés, par aire ou par indice de forme ; germes, bundles et parois affichés ou non ; thème **noir sur blanc** (défaut)
   ou **blanc sur noir**, également appliqué au SVG enregistré. Le bord du tissu est tracé en trait épais ;
 - **Métriques** : valeurs courantes ; un clic sur une métrique trace son évolution en fonction de l'itération ;
   histogramme du nombre de côtés ;
@@ -89,7 +89,7 @@ Les actions moins fréquentes sont dans des **fenêtres surgissantes**, ouvertes
 panneau (Échap pour fermer) :
 
 - **Fichiers...** (touche E) : enregistrer ou charger un fichier de cellules (ou de paramètres) ; exporter le SVG
-  (nom, germes, légende, largeur en pixels, thème) ; capturer la vue en PNG ; exporter les paramètres
+  (nom, germes, bundles, largeur en pixels, thème) ; capturer la vue en PNG ; exporter les paramètres
   (`<nom>_params.txt`, relisible par `cellyod`). Un fichier de cellules ou de paramètres peut aussi être
   glissé-déposé dans la fenêtre ;
 - **Préférences...** : taille de police, largeur du panneau ;
@@ -160,7 +160,7 @@ valeur du fichier.
 | `bundleMotion` | lloyd | `lloyd`, `fixed` ou `attract` |
 | `output` | cells.txt | fichier de cellules produit |
 | `svg` | cells.svg | vue SVG (`none` : pas de SVG) |
-| `svgSeeds`, `svgLegend` | 1, 1 | SVG : afficher les germes, la légende des bundles |
+| `svgSeeds`, `svgBundles` | 1, 1 | SVG : afficher les germes, les bundles |
 | `svgTheme` | light | SVG : `light` (noir sur blanc) ou `dark` (blanc sur noir) |
 | `morphology` | — | ajoute une ligne de paramètres et de métriques au fichier (balayages) |
 
