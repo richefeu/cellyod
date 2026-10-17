@@ -1,57 +1,77 @@
-# cellyod — génération de tissus cellulaires
+# cellyod
+
+**Génération de tissus cellulaires végétaux par pavage de Voronoï, itérations de Lloyd et attraction vers des
+faisceaux vasculaires.**
 
 ![cellyod](celloyd.gif)
 
-cellyod pave un domaine par un diagramme de Voronoï, régularisé par des itérations de Lloyd. Une fraction des
-germes peut être des **bundles** (faisceaux vasculaires) qui attirent les autres cellules au sens d'une distance
-de Mahalanobis : on obtient alors des tissus végétaux, du pavage hexagonal régulier aux tissus très hétérogènes
-organisés en colonnes (modèle de Trivino *et al.*, *A continuous description of plant cellular tissues from
-variational Voronoi morphogenesis*, en préparation).
+cellyod produit des pavages cellulaires bidimensionnels, du pavage hexagonal régulier aux tissus végétaux
+hétérogènes organisés en amas ou en colonnes autour des faisceaux vasculaires. Les tissus obtenus servent de
+microstructures pour la simulation mécanique (éléments discrets, rupture) et pour l'étude quantitative de leur
+morphologie.
 
-C++17, sans dépendance pour le cœur et la ligne de commande. L'interface graphique dépend en plus de raylib
-(`brew install raylib`) ; raygui et rini (single-header) sont fournis dans `gui/`.
+## Le nom
+
+**cellyod** contracte *cell* et *Lloyd*, du nom de l'algorithme de Lloyd qui régularise les cellules à chaque
+itération. Les lettres **YO** (*cellYOd*) rendent hommage à **Yohann** Trivino, à l'origine de la méthode.
+
+## Origine scientifique et crédits
+
+La méthode de génération des tissus provient des travaux de **Yohann Trivino**, engagés pendant sa thèse et
+poursuivis depuis :
+
+- Y. Trivino, *Modélisation mécanique ascendante des structures cellulaires : de la compaction des particules
+  déformables à la rupture des tissus végétaux*, thèse de doctorat, Université de Montpellier, 2024
+  (dir. J.-Y. Delenne et F. Radjaï), [theses.fr/2024UMONS042](https://theses.fr/2024UMONS042) ;
+- Y. Trivino *et al.*, *A continuous description of plant cellular tissues from variational Voronoi
+  morphogenesis* (en préparation) : modèle d'attraction des cellules vers les faisceaux vasculaires au sens d'une
+  distance de Mahalanobis, dont les deux paramètres (intensité α et anisotropie K) parcourent continûment
+  l'espace des morphologies de tissus végétaux.
+
+La prise en compte de domaines de forme quelconque (germes extérieurs figés, cellules coupées pondérées par leur
+aire extérieure) reprend également une méthode mise au point par Yohann Trivino.
+
+Le code de cellyod (cœur C++, ligne de commande, interface graphique, documentation et études) a été développé
+par Vincent Richefeu avec l'assistance de [Claude Code](https://claude.com/claude-code) (Anthropic).
+
+## Fonctionnalités
+
+- **États initiaux** : réseau hexagonal ou carré perturbé, tirage aléatoire avec ou sans distance minimale.
+- **Itérations de Lloyd** avec attraction vers des faisceaux vasculaires (*bundles*) au sens de Mahalanobis.
+- **Domaine de forme quelconque**, défini par une expression f(x, y) ≤ 0 (disque, anneau, ellipse, union,
+  différence...).
+- **Pavage à sommets partagés**, relisible pour reprendre les itérations exactement là où elles s'étaient arrêtées.
+- **Exports** : fichier de cellules, un polygone par cellule avec décalage des parois, SVG (noir sur blanc ou
+  blanc sur noir), métriques morphologiques pour les balayages paramétriques.
+- **Interface graphique** interactive : le tissu évolue en direct et tous les paramètres se règlent à la souris.
+- **C++17 sans dépendance** pour le cœur et la ligne de commande ; l'interface utilise raylib.
+
+## Installation
+
+Prérequis : un compilateur C++17. Pour l'interface graphique, raylib (`brew install raylib` sous macOS) ;
+raygui et rini (bibliothèques d'un seul fichier) sont fournis dans `gui/`.
 
 ```bash
-make                         # -> cellyod et cellyod-gui
-make cellyod                 # ligne de commande seule (sans raylib)
+git clone https://github.com/richefeu/cellyod.git
+cd cellyod
+make              # cellyod (ligne de commande) et cellyod-gui (interface)
+make cellyod      # ligne de commande seule, sans raylib
+```
+
+## Démarrage rapide
+
+```bash
+./cellyod-gui examples/tissu.txt                     # exploration interactive
+
 cd examples
-../cellyod tissu.txt         # -> tissu_cells.txt + tissu.svg
-../cellyod tissu.txt alpha=0.1 "anisotropy=1000 90" svg=none
-../cellyod -load tissu_cells.txt lloydIterations=100   # reprend les itérations là où elles s'étaient arrêtées
-../cellyod -h                # liste des paramètres
+../cellyod tissu.txt                                 # -> tissu_cells.txt + tissu.svg
+../cellyod tissu.txt alpha=0.1 "anisotropy=1000 90"  # variante, sans modifier le fichier
+../cellyod -load tissu_cells.txt lloydIterations=100 # reprise des itérations
+../cellyod -h                                        # liste des paramètres
 ```
 
 Toutes les grandeurs sont **sans dimension** : l'unité de longueur est le diamètre équivalent visé des cellules.
 Une cellule a donc une aire visée de π/4, et un domaine `Lx × Ly` contient environ `Lx·Ly/(π/4)` cellules.
-
-## Forme du domaine
-
-Les germes remplissent toujours le rectangle `[0, Lx] × [0, Ly]`. Le tissu est la partie de ce rectangle où
-`f(x, y) ≤ 0`, f étant donnée par l'expression `shape` (sans `shape` : tout le rectangle) :
-
-- une cellule coupée par le bord de la forme est réduite à sa partie intérieure ; le bord courbe est suivi
-  finement (points de passage par dichotomie, puis projection sur f = 0) ;
-- une cellule entièrement extérieure est vide et son germe reste **immobile** : les germes extérieurs forment la
-  paroi qui contient le tissu ;
-- une cellule coupée va vers le centroïde c de sa partie intérieure, en
-  p' = (c + α b + w c)/(1 + α + w), avec w = `beta` × (aire extérieure). Avec `beta` grand (défaut 10⁶),
-  elle suit Lloyd sans être attirée par les bundles ; les cellules entièrement intérieures ne sont pas
-  concernées.
-
-Le rectangle doit déborder un peu de la forme (une ou deux cellules) pour qu'il y ait des germes extérieurs.
-
-Expression : opérateurs `+ - * / ^`, parenthèses, fonctions `sin cos tan asin acos atan exp log sqrt abs
-floor ceil` et `atan2(y, x) min(a, b) max(a, b) pow(a, b)`, constantes `pi` et `e`. Variables : `x`, `y`, `r` et
-`t` (rayon et angle en radians depuis le centre du rectangle), `cx`, `cy` (centre), `Lx`, `Ly`. Union de deux
-formes : `min(f1, f2)` ; intersection : `max(f1, f2)` ; différence : `max(f1, -f2)`.
-
-| Forme | `shape` |
-|---|---|
-| disque de rayon 18 | `r - 18` |
-| ellipse de demi-axes 20 et 12 | `((x-cx)/20)^2 + ((y-cy)/12)^2 - 1` |
-| rectangle centré 30 × 16 | `max(abs(x-cx) - 15, abs(y-cy) - 8)` |
-| anneau | `max(r - 18, 8 - r)` |
-| disque échancré (`examples/rein.txt`) | `r - 20 + 4.5*exp(-t^2/0.12)` |
 
 ## Documentation
 
@@ -89,7 +109,8 @@ Le tissu évolue en direct, itération par itération. Le panneau de droite est 
   par nombre de côtés, par aire ou par indice de forme ; germes, bundles et parois affichés ou non ; thème **noir sur blanc** (défaut)
   ou **blanc sur noir**, également appliqué au SVG enregistré. Le bord du tissu est tracé en trait épais ;
 - **Métriques** : valeurs courantes ; un clic sur une métrique trace son évolution en fonction de l'itération ;
-  histogramme du nombre de côtés ;
+  histogramme du nombre de côtés.
+
 Les actions moins fréquentes sont dans des **fenêtres surgissantes**, ouvertes depuis la barre en haut du
 panneau (Échap pour fermer) :
 
@@ -128,8 +149,8 @@ Les réglages d'affichage, les options d'export et l'état des sections sont con
 4. **Voronoï** découpé au domaine, par découpe de demi-plans (cellules convexes), puis fusion des sommets
    communs : le pavage est décrit par des sommets partagés.
 
-Contrairement à nodeGen, il n'y a aucune reconformation (arêtes courtes, nombre d'arêtes) : le pavage est le
-Voronoï exact des germes.
+Aucune reconformation n'est appliquée (arêtes courtes, nombre d'arêtes) : le pavage est le Voronoï exact des
+germes.
 
 **Paramètres de forme.** `alpha` règle surtout l'hétérogénéité des aires (les cellules proches d'un bundle
 rétrécissent) ; l'anisotropie `K` de Σ règle l'organisation spatiale (`K = 1` : amas autour de chaque bundle ;
@@ -143,6 +164,35 @@ les cellules continuent de se resserrer, et `lloydIterations` est un troisième 
 | colonnes | idem avec `anisotropy 1000` | `examples/colonnes.txt` |
 | coupe tomographique | `lattice square`, `disorder 0`, `lloydIterations 5`, `alpha 0.02`, `anisotropy 10000` | `examples/tomographie.txt` |
 | domaine non convexe | référence dans un disque échancré | `examples/rein.txt` |
+
+## Forme du domaine
+
+Les germes remplissent toujours le rectangle `[0, Lx] × [0, Ly]`. Le tissu est la partie de ce rectangle où
+`f(x, y) ≤ 0`, f étant donnée par l'expression `shape` (sans `shape` : tout le rectangle) :
+
+- une cellule coupée par le bord de la forme est réduite à sa partie intérieure ; le bord courbe est suivi
+  finement (points de passage par dichotomie, puis projection sur f = 0) ;
+- une cellule entièrement extérieure est vide et son germe reste **immobile** : les germes extérieurs forment la
+  paroi qui contient le tissu ;
+- une cellule coupée va vers le centroïde c de sa partie intérieure, en
+  p' = (c + α b + w c)/(1 + α + w), avec w = `beta` × (aire extérieure). Avec `beta` grand (défaut 10⁶),
+  elle suit Lloyd sans être attirée par les bundles ; les cellules entièrement intérieures ne sont pas
+  concernées.
+
+Le rectangle doit déborder un peu de la forme (une ou deux cellules) pour qu'il y ait des germes extérieurs.
+
+Expression : opérateurs `+ - * / ^`, parenthèses, fonctions `sin cos tan asin acos atan exp log sqrt abs
+floor ceil` et `atan2(y, x) min(a, b) max(a, b) pow(a, b)`, constantes `pi` et `e`. Variables : `x`, `y`, `r` et
+`t` (rayon et angle en radians depuis le centre du rectangle), `cx`, `cy` (centre), `Lx`, `Ly`. Union de deux
+formes : `min(f1, f2)` ; intersection : `max(f1, f2)` ; différence : `max(f1, -f2)`.
+
+| Forme | `shape` |
+|---|---|
+| disque de rayon 18 | `r - 18` |
+| ellipse de demi-axes 20 et 12 | `((x-cx)/20)^2 + ((y-cy)/12)^2 - 1` |
+| rectangle centré 30 × 16 | `max(abs(x-cx) - 15, abs(y-cy) - 8)` |
+| anneau | `max(r - 18, 8 - r)` |
+| disque échancré (`examples/rein.txt`) | `r - 20 + 4.5*exp(-t^2/0.12)` |
 
 ## Paramètres
 
