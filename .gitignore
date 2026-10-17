@@ -27,3 +27,15 @@ doc/*.fls
 doc/*.fdb_latexmk
 doc/figures/
 doc/*.pdf
+
+# Études : produits des scripts
+etudes/*/work/
+etudes/*/data/
+etudes/*/figures/
+etudes/*/mesure
+etudes/*/*.pdf
+etudes/*/*.aux
+etudes/*/*.log
+etudes/*/*.out
+etudes/*/*.fls
+etudes/*/*.fdb_latexmk

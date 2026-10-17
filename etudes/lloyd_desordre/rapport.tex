@@ -1,0 +1,276 @@
+% Rapport de l'étude « désordre et itérations de Lloyd » — produit par ./run.sh (latexmk -lualatex rapport.tex)
+\documentclass[10pt,a4paper]{article}
+
+\usepackage{fontspec}
+\usepackage[french]{babel}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{float}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{enumitem}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
+
+\setlist{itemsep=1pt,topsep=3pt}
+\emergencystretch=3em
+\lstset{basicstyle=\ttfamily\footnotesize,columns=fullflexible,frame=single,framerule=0.3pt,
+  backgroundcolor=\color{gray!6},breaklines=true,keepspaces=true,upquote=true}
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\vect}[1]{\boldsymbol{#1}}
+\definecolor{cU}{HTML}{2D7DD2}
+\definecolor{cR}{HTML}{E0524D}
+\definecolor{cH}{HTML}{2E9E5B}
+
+% courbes d'un indicateur pour les trois états initiaux (abscisse : itérations + 1)
+\pgfplotsset{
+  etude/.style={width=0.48\linewidth,height=4.6cm,xlabel={itérations $+1$},
+    grid=major,grid style={gray!20},legend style={font=\scriptsize},
+    every axis plot/.append style={thick,mark size=1.1pt,error bars/y dir=both,error bars/y explicit}},
+}
+\newcommand{\courbes}[2]{% #1 colonne, #2 options supplémentaires
+  \begin{axis}[etude,xmode=log,#2]
+    \addplot[cU,mark=*] table[x expr=\thisrow{iteration}+1,y=#1,y error=#1_sd]{data/uniform.dat};
+    \addplot[cR,mark=square*] table[x expr=\thisrow{iteration}+1,y=#1,y error=#1_sd]{data/random.dat};
+    \addplot[cH,mark=triangle*] table[x expr=\thisrow{iteration}+1,y=#1,y error=#1_sd]{data/hex.dat};
+  \end{axis}}
+
+\title{Désordre d'un pavage de Voronoï au fil des itérations de Lloyd\\[3pt]
+  \large Petite étude réalisée avec \code{cellyod}}
+\author{Dépôt \code{cellYOd}, répertoire \code{etudes/lloyd\_desordre}}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+  Les itérations de Lloyd rendent un pavage de Voronoï de plus en plus régulier, mais à quelle vitesse, et
+  jusqu'où ? On suit ici, sans bundles ($\alpha=0$), neuf indicateurs de désordre (dispersion des aires et des
+  longueurs de paroi, nombre de côtés, ordre orientationnel, énergie de Lloyd\dots) pour trois états initiaux, de
+  0 à 1000 itérations, sur des tissus d'environ 2000 cellules et cinq graines. Le désordre décroît d'abord très
+  vite (une dizaine d'itérations divise par trois la dispersion des aires d'un tirage uniforme), puis lentement,
+  en loi de puissance de faible exposant : partant d'un tirage aléatoire, Lloyd ne retrouve pas le réseau
+  hexagonal mais un état centroïdal avec des défauts topologiques (paires pentagone--heptagone) qui
+  disparaissent très lentement. Les indicateurs se répartissent en deux familles, métrique et topologique, qui
+  évoluent à des vitesses différentes ; deux nombres suffisent à décrire le désordre.
+\end{abstract}
+
+%======================================================================
+\section{Question et dispositif}
+%======================================================================
+
+\textbf{Question.} À partir d'un ensemble de germes plus ou moins désordonné, l'itération de Lloyd déplace chaque
+germe au centroïde de sa cellule de Voronoï. On veut caractériser le désordre du pavage en fonction du nombre
+d'itérations $k$, choisir des indicateurs pertinents et savoir si l'état initial est oublié.
+
+\textbf{Simulations.} \code{cellyod}, domaine carré $40\times40$ (longueurs en diamètres de cellule, environ
+2000 cellules), sans bundles ni forme ($\alpha=0$ : Lloyd pur). Trois états initiaux :
+\begin{itemize}
+  \item \code{uniform} : tirage uniforme (processus de Poisson), le plus désordonné ;
+  \item \code{random} : tirage avec une distance minimale de $0.7$ espacement (processus à cœur dur) ;
+  \item \code{hex} : réseau hexagonal dont chaque germe est déplacé au hasard d'au plus $0.5$ pas
+    (\code{disorder 0.5}), c'est-à-dire un cristal fortement perturbé.
+\end{itemize}
+Pour chaque état, 5 graines ; chaque calcul est enregistré aux points de contrôle
+$k={}$0, 1, 2, 3, 5, 7, 10, 15, 20, 30, 50, 70, 100, 150, 200, 300, 500, 700 et 1000, en reprenant le fichier
+précédent avec \code{-load} (ce qui donne exactement les mêmes germes qu'un calcul d'une traite). Les courbes
+donnent la moyenne sur les 5 graines, les barres l'écart type.
+
+\textbf{Reproduire l'étude.} Tout est produit par un script (environ une minute) :
+\begin{lstlisting}
+cd etudes/lloyd_desordre
+./run.sh        # compile cellyod et mesure, simulations, mesures, figures, ce rapport
+\end{lstlisting}
+Les réglages (taille, états, graines, points de contrôle) sont en tête de \code{run.sh}. Les indicateurs sont
+calculés par \code{mesure} (\code{mesure.cpp}, 140 lignes), qui relit les fichiers de cellules avec
+le cœur de \code{cellyod} : \code{./mesure work/*.txt} donne une ligne d'indicateurs par fichier.
+
+%======================================================================
+\section{Indicateurs de désordre}
+%======================================================================
+
+Pour ne pas mêler désordre et effet du bord, seules les cellules \emph{profondes} sont comptées : ni cellule de
+bord, ni voisine d'une cellule de bord (environ 1700 cellules). Sur un pavage hexagonal parfait, tous les
+indicateurs prennent alors exactement leur valeur de référence (dernière ligne du tableau~\ref{tab:valeurs}).
+\begin{itemize}
+  \item \textbf{Métriques} :
+    $\mathrm{cv}_A=\sigma_A/\langle A\rangle$, coefficient de variation des aires ;
+    $\mathrm{cv}_L$, coefficient de variation des longueurs de paroi (parois entre deux cellules profondes) ;
+    $\mathrm{cv}_{NN}$, coefficient de variation de la distance d'un germe à son plus proche voisin ;
+    $\langle SI\rangle=\langle4\pi A/P^2\rangle$, indice de forme (hexagone : 0.9069) ;
+  \item \textbf{Énergie} : moment d'inertie normalisé
+    $G=\sum_i\int_{V_i}\|\vect x-\vect p_i\|^2d\vect x\,/\,(2n\langle A\rangle^2)$, l'énergie que minimise Lloyd,
+    rendue sans dimension ; minimale pour le pavage hexagonal, $G_{\mathrm{hex}}=5/(36\sqrt3)=0.080188$ ;
+  \item \textbf{Topologiques} : $\sigma_n$, écart type du nombre de côtés (0 pour un pavage hexagonal) ; $p_6$,
+    fraction d'hexagones ; $\psi_6=\langle|\frac1{n_i}\sum_j e^{6i\theta_{ij}}|\rangle$, ordre orientationnel
+    local, $\theta_{ij}$ étant l'angle du germe $j$, voisin de Voronoï de $i$ (1 pour un réseau hexagonal) ;
+  \item \textbf{Convergence} : résidu $\langle\|\vect p_i-\vect c_i\|\rangle/s$, distance moyenne entre un germe et
+    le centroïde de sa cellule ($s$ : espacement visé) ; il est nul au point fixe de Lloyd (tessellation
+    centroïdale), que celle-ci soit ordonnée ou non.
+\end{itemize}
+
+\textbf{Contrôle.} Pour le tirage uniforme sans itération (pavage de Voronoï--Poisson), on mesure
+$\mathrm{cv}_A=0.538$, $\sigma_n=1.341$ et $p_6=0.297$, proches des valeurs connues pour un domaine infini
+(environ 0.53, 1.33 et 0.29).
+
+%======================================================================
+\section{Résultats}
+%======================================================================
+
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}{0.24\linewidth}\includegraphics[width=\linewidth]{figures/vue_0.png}\caption{$k=0$}\end{subfigure}\hfill
+  \begin{subfigure}{0.24\linewidth}\includegraphics[width=\linewidth]{figures/vue_3.png}\caption{$k=3$}\end{subfigure}\hfill
+  \begin{subfigure}{0.24\linewidth}\includegraphics[width=\linewidth]{figures/vue_20.png}\caption{$k=20$}\end{subfigure}\hfill
+  \begin{subfigure}{0.24\linewidth}\includegraphics[width=\linewidth]{figures/vue_200.png}\caption{$k=200$}\end{subfigure}
+  \caption{Tirage \code{uniform} ($16\times16$) au fil des itérations, cellules colorées par nombre de côtés :
+    \textcolor[HTML]{D64541}{4}, \textcolor[HTML]{F0963C}{5}, \textcolor[HTML]{8DB87A}{6},
+    \textcolor[HTML]{5FAAE1}{7}, \textcolor[HTML]{2D6EB4}{8}, \textcolor[HTML]{193C6E}{9 et plus}. Les cellules du
+    bord, coupées par le carré, ont naturellement moins de côtés. Tracé à partir de l'export polygones de
+    \code{cellyod}.}
+  \label{fig:vues}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}\courbes{cvA}{ymode=log,ylabel={$\mathrm{cv}_A$},
+      legend entries={\code{uniform},\code{random},\code{hex}},legend pos=south west}\end{tikzpicture}\hfill
+  \begin{tikzpicture}\courbes{cvL}{ymode=log,ylabel={$\mathrm{cv}_L$}}\end{tikzpicture}\\[1mm]
+  \begin{tikzpicture}\courbes{sigmaN}{ymode=log,ylabel={$\sigma_n$}}\end{tikzpicture}\hfill
+  \begin{tikzpicture}
+    \begin{axis}[etude,xmode=log,ymode=log,ylabel={$1-p_6$}]
+      \addplot[cU,mark=*] table[x expr=\thisrow{iteration}+1,y expr=1-\thisrow{p6},y error=p6_sd]{data/uniform.dat};
+      \addplot[cR,mark=square*] table[x expr=\thisrow{iteration}+1,y expr=1-\thisrow{p6},y error=p6_sd]{data/random.dat};
+      \addplot[cH,mark=triangle*] table[x expr=\thisrow{iteration}+1,y expr=1-\thisrow{p6},y error=p6_sd]{data/hex.dat};
+    \end{axis}
+  \end{tikzpicture}\\[1mm]
+  \begin{tikzpicture}
+    \begin{axis}[etude,xmode=log,ymode=log,ylabel={$G-G_{\mathrm{hex}}$}]
+      \addplot[cU,mark=*] table[x expr=\thisrow{iteration}+1,y expr=\thisrow{G}-0.0801875,y error=G_sd]{data/uniform.dat};
+      \addplot[cR,mark=square*] table[x expr=\thisrow{iteration}+1,y expr=\thisrow{G}-0.0801875,y error=G_sd]{data/random.dat};
+      \addplot[cH,mark=triangle*] table[x expr=\thisrow{iteration}+1,y expr=\thisrow{G}-0.0801875,y error=G_sd]{data/hex.dat};
+    \end{axis}
+  \end{tikzpicture}\hfill
+  \begin{tikzpicture}\courbes{residu}{ymode=log,ylabel={résidu germe--centroïde}}\end{tikzpicture}
+  \caption{Indicateurs en fonction du nombre d'itérations (échelles logarithmiques ; moyenne et écart type sur 5
+    graines, environ 1700 cellules profondes chacune). Bleu : \code{uniform} ; rouge : \code{random} ; vert :
+    \code{hex} (\code{disorder 0.5}).}
+  \label{fig:courbes}
+\end{figure}
+
+\begin{table}[H]
+  \centering
+  \input{data/tableau.tex}
+  \caption{Valeurs moyennes (5 graines) à quelques points de contrôle.}
+  \label{tab:valeurs}
+\end{table}
+
+\subsection{Deux régimes}
+
+\textbf{Régime rapide} (les dix premières itérations). L'essentiel du désordre métrique disparaît : pour le
+tirage uniforme, $\mathrm{cv}_A$ passe de 0.54 à 0.17, $\mathrm{cv}_{NN}$ de 0.53 à 0.11 et $G$ de 0.161 à 0.085,
+soit plus de 90\,\% du chemin vers $G_{\mathrm{hex}}$. Les très petites cellules du tirage de Poisson, entourées de
+grandes cellules, s'élargissent dès les premières itérations (figure~\ref{fig:vues}, $k=3$).
+
+\textbf{Régime lent} (au-delà d'une vingtaine d'itérations). Les indicateurs continuent de décroître, mais en loi
+de puissance de faible exposant. Entre $k=20$ et $k=1000$, pour le tirage uniforme,
+$\mathrm{cv}_A\propto k^{-0.27}$, $\mathrm{cv}_L\propto k^{-0.18}$, $\sigma_n\propto k^{-0.14}$,
+$1-p_6\propto k^{-0.28}$ et $G-G_{\mathrm{hex}}\propto k^{-0.38}$ (ajustements sur les moyennes). Après 1000
+itérations, il reste 14\,\% de cellules non hexagonales. Dans le même temps, le résidu germe--centroïde décroît
+en $k^{-0.96}$, soit comme $1/k$ : les germes sont de plus en plus proches d'une tessellation centroïdale, mais
+celle-ci contient des défauts.
+
+\textbf{Nature des défauts.} Les cellules non hexagonales restantes sont uniquement des pentagones et des
+heptagones, en nombres égaux (pour la graine 1 du tirage uniforme : 9.7\,\% de chaque à $k=200$, 7.9\,\% à
+$k=1000$), le plus souvent accolés en paires (figure~\ref{fig:vues}, $k=200$) : ce sont des dislocations du
+réseau hexagonal, et leurs
+alignements forment des joints entre domaines hexagonaux d'orientations différentes ($\psi_6=0.84$ à $k=1000$).
+Une dislocation est une configuration quasi stationnaire pour Lloyd (le résidu est faible) : elle ne disparaît
+qu'en se déplaçant jusqu'au bord ou en s'annihilant avec une dislocation opposée, d'où la lenteur du second
+régime. Lloyd se comporte comme une descente d'énergie qui se bloque dans des états métastables, à la
+manière d'une trempe.
+
+\subsection{Mémoire de l'état initial}
+
+Les tirages \code{uniform} et \code{random} partent de niveaux de désordre très différents ($\mathrm{cv}_A$ 0.54
+et 0.19) mais leurs courbes se rejoignent : à $k=100$, $p_6$ vaut 0.77 et 0.78, $\sigma_n$ 0.48 et 0.47 ; à
+$k=1000$, $\mathrm{cv}_A$ vaut 0.046 et 0.044. La topologie oublie l'état initial en une centaine d'itérations ; la
+dispersion des aires en garde un peu plus longtemps la trace.
+
+Le cristal perturbé (\code{hex}, \code{disorder 0.5}) part pourtant d'un désordre topologique comparable à
+\code{random} ($\sigma_n=0.92$, $p_6=0.44$) mais suit une tout autre trajectoire : les germes « se souviennent » du
+réseau sous-jacent, et le pavage redevient presque parfaitement hexagonal en une cinquantaine d'itérations
+($p_6=0.97$, $\psi_6=0.96$). Il reste alors sur un plateau : quelques dislocations subsistent, vraisemblablement
+parce que le réseau hexagonal ne s'accorde pas au carré $40\times40$ : ses rangées sont espacées de $0.825$,
+soit 48.5 rangées sur la hauteur, un nombre non entier. Entre $k=150$ et $k=1000$, $\sigma_n$ remonte légèrement (de 0.152 à 0.166) pour les cinq graines,
+un effet de l'ordre de l'écart type entre graines ; une explication possible, non vérifiée ici, est la migration
+de dislocations du bord vers les cellules profondes.
+
+\subsection{Quels indicateurs retenir ?}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    \begin{axis}[width=0.46\linewidth,height=5cm,xlabel={$\sigma_n$},ylabel={$\mathrm{cv}_L$},grid=major,
+        grid style={gray!20},only marks,mark size=1.3pt]
+      \addplot[cU,mark=*] table[x=sigmaN,y=cvL]{data/uniform.dat};
+      \addplot[cR,mark=square*] table[x=sigmaN,y=cvL]{data/random.dat};
+      \addplot[cH,mark=triangle*] table[x=sigmaN,y=cvL]{data/hex.dat};
+    \end{axis}
+  \end{tikzpicture}\hfill
+  \begin{tikzpicture}
+    \begin{axis}[width=0.46\linewidth,height=5cm,xlabel={$\sigma_n$},ylabel={$\mathrm{cv}_A$},grid=major,
+        grid style={gray!20},only marks,mark size=1.3pt,ymode=log]
+      \addplot[cU,mark=*] table[x=sigmaN,y=cvA]{data/uniform.dat};
+      \addplot[cR,mark=square*] table[x=sigmaN,y=cvA]{data/random.dat};
+      \addplot[cH,mark=triangle*] table[x=sigmaN,y=cvA]{data/hex.dat};
+    \end{axis}
+  \end{tikzpicture}
+  \caption{Indicateurs tracés l'un en fonction de l'autre, pour tous les états et tous les points de contrôle.
+    À gauche, $\mathrm{cv}_L$ et $\sigma_n$ décrivent la même chose, quel que soit l'état initial ; à droite,
+    $\mathrm{cv}_A$ et $\sigma_n$ ne sont pas liés de la même façon selon l'état initial.}
+  \label{fig:correlations}
+\end{figure}
+
+Sur l'ensemble des points (3 états, 19 points de contrôle), les indicateurs forment deux familles
+(figure~\ref{fig:correlations}, coefficients de corrélation linéaire $r$) :
+\begin{itemize}
+  \item \textbf{topologique} : $\sigma_n$, $p_6$, $\psi_6$ et, plus surprenant, $\mathrm{cv}_L$ sont presque
+    équivalents ($|r|\ge0.96$ deux à deux, $0.985$ entre $\mathrm{cv}_L$ et $\sigma_n$) : la dispersion des
+    longueurs de paroi vient vraisemblablement surtout des parois courtes qui entourent les défauts. Ils mesurent la densité de défauts et évoluent lentement ;
+  \item \textbf{métrique} : $\mathrm{cv}_A$, $\mathrm{cv}_{NN}$, $G$ et $\langle SI\rangle$ mesurent l'hétérogénéité
+    des tailles et des formes ($|r|\ge0.94$ entre $\mathrm{cv}_A$, $\mathrm{cv}_{NN}$ et $\langle SI\rangle$) ; ils
+    chutent pendant le régime rapide et sont moins liés à la topologie ($r=0.89$ entre $\mathrm{cv}_A$ et
+    $\sigma_n$, $0.72$ entre $G$ et $\sigma_n$, avec une relation qui dépend de l'état initial).
+\end{itemize}
+Pour décrire le désordre d'un pavage, un couple suffit : \textbf{un indicateur métrique}, de préférence
+$\mathrm{cv}_A$ (le plus simple, déjà calculé par \code{cellyod}) ou $G-G_{\mathrm{hex}}$ (lié directement à
+l'énergie de Lloyd), et \textbf{un indicateur topologique}, $\sigma_n$ ou $1-p_6$ (simples, sans paramètre).
+$\psi_6$ apporte en plus l'information d'orientation (domaines et joints), mais demande les voisinages.
+Le résidu germe--centroïde n'est pas un indicateur de désordre : il mesure la distance au point fixe.
+
+%======================================================================
+\section{Conclusions et pistes}
+%======================================================================
+
+\begin{itemize}
+  \item Lloyd régularise très vite les tailles et les formes (une dizaine d'itérations), puis élimine lentement
+    les défauts topologiques, en loi de puissance de faible exposant ; à partir d'un tirage aléatoire, il ne
+    retrouve pas le réseau hexagonal, même après 1000 itérations ($p_6\approx0.86$).
+  \item Le nombre d'itérations est donc un réglage du désordre : quelques itérations pour un tissu encore varié,
+    quelques dizaines pour des cellules régulières mais une topologie désordonnée ; pour un tissu presque
+    hexagonal, mieux vaut partir d'un réseau perturbé (\code{hex}) que d'un tirage aléatoire.
+  \item Deux nombres suffisent à décrire le désordre : un métrique ($\mathrm{cv}_A$ ou $G$) et un topologique
+    ($\sigma_n$ ou $p_6$).
+\end{itemize}
+\textbf{Pistes.} Effet de la taille du domaine (le plateau de \code{hex} dépend vraisemblablement de
+l'incompatibilité entre le réseau et le carré ; à tester avec plusieurs tailles, ou avec une forme circulaire
+via \code{shape}) ; plus de graines pour préciser les exposants ; recuit (petite perturbation des germes puis
+Lloyd) pour éliminer les dislocations ; mêmes mesures avec des bundles, pour séparer le désordre imposé par
+l'attraction de celui hérité de l'état initial.
+
+\end{document}

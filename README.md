@@ -63,6 +63,11 @@ LuaLaTeX nécessaires) :
 cd doc && ./make_figures.sh && latexmk -lualatex tutorial_cellyod.tex   # -> doc/tutorial_cellyod.pdf
 ```
 
+## Études
+
+`etudes/lloyd_desordre/` : petite étude du désordre d'un pavage au fil des itérations de Lloyd (sans bundles),
+avec un programme de mesure, un script qui enchaîne simulations et figures, et un rapport PDF (`./run.sh`).
+
 ## Interface graphique
 
 ```bash
