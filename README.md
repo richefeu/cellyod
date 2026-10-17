@@ -13,7 +13,7 @@ morphologie.
 ## Le nom
 
 **cellyod** contracte *cell* et *Lloyd*, du nom de l'algorithme de Lloyd qui régularise les cellules à chaque
-itération. Les lettres **YO** (*cellYOd*) rendent hommage à **Yohann** Trivino, à l'origine de la méthode.
+itération. Les lettres **YO** (*cellYOd*) font référence à **Yohann** Trivino, à l'origine de la méthode.
 
 ## Origine scientifique et crédits
 
@@ -32,7 +32,7 @@ La prise en compte de domaines de forme quelconque (germes extérieurs figés, c
 aire extérieure) reprend également une méthode mise au point par Yohann Trivino.
 
 Le code de cellyod (cœur C++, ligne de commande, interface graphique, documentation et études) a été développé
-par Vincent Richefeu avec l'assistance de [Claude Code](https://claude.com/claude-code) (Anthropic).
+avec l'assistance de [Claude Code](https://claude.com/claude-code) (Anthropic).
 
 ## Fonctionnalités
 
