@@ -2,6 +2,9 @@
 //
 // Usage : mesure cells1.txt [cells2.txt ...]     indicateurs, une ligne par fichier (en-tête en première ligne)
 //         mesure -hist cells.txt                  histogrammes des angles aux sommets et des orientations de paroi
+//         mesure -windows w cells.txt             indicateurs par fenêtre carrée de côté w (une ligne par fenêtre) :
+//                                                 fenêtres jointives, à 2.5 diamètres du bord du domaine ; cellules
+//                                                 profondes comptées par leur centroïde, parois par leur milieu
 //
 // Les indicateurs portent sur les cellules « profondes » : ni cellule de bord (paroi sur le bord du tissu), ni
 // voisine d'une cellule de bord, pour ne pas mêler le désordre et l'effet du bord (les cellules de la deuxième
@@ -46,6 +49,7 @@
 #include <cmath>
 #include <complex>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <unordered_map>
 #include <unordered_set>
@@ -187,16 +191,78 @@ int histograms(const char *file) {
   return 0;
 }
 
+// Indicateurs par fenêtre : nombre de cellules, cvA, sigmaN, p6, aire moyenne, S6 des parois de la fenêtre
+int windows(double w, const char *file) {
+  Tissue t = loadCells(file);
+  Analysis an(t);
+  const CellMesh &m = an.m;
+  const double margin = 2.5;
+  const int nx = (int)std::floor((t.P.Lx - 2.0 * margin) / w), ny = (int)std::floor((t.P.Ly - 2.0 * margin) / w);
+  if (nx < 1 || ny < 1) {
+    std::fprintf(stderr, "mesure : fenêtre %g trop grande pour le domaine\n", w);
+    return 1;
+  }
+  auto win = [&](const V &q) {
+    int i = (int)std::floor((q.x - margin) / w), j = (int)std::floor((q.y - margin) / w);
+    return (i < 0 || j < 0 || i >= nx || j >= ny) ? -1 : j * nx + i;
+  };
+  const int nw = nx * ny;
+  std::vector<Stat> area(nw), sides(nw);
+  std::vector<size_t> hex(nw, 0);
+  std::vector<std::complex<double>> z6(nw, {0.0, 0.0});
+  std::vector<double> sumL(nw, 0.0);
+  for (size_t c = 0; c < m.cells.size(); c++) {
+    if (!an.deep[c]) {
+      continue;
+    }
+    Polygon p;
+    for (int v : m.cells[c]) {
+      p.push_back(m.verts[v]);
+    }
+    int k = win(centroid(p));
+    if (k >= 0) {
+      area[k].add(std::fabs(signedArea(p)));
+      sides[k].add((double)p.size());
+      hex[k] += p.size() == 6;
+    }
+  }
+  for (size_t e = 0; e < an.edges.size(); e++) {
+    if (!an.deepEdge(e)) {
+      continue;
+    }
+    const V &a = m.verts[an.edges[e].first], &b = m.verts[an.edges[e].second];
+    int k = win((a + b) * 0.5);
+    if (k >= 0) {
+      double l = norm(b - a);
+      z6[k] += l * std::polar(1.0, 6.0 * edgeAngle(a, b));
+      sumL[k] += l;
+    }
+  }
+  std::printf("w n cvA sigmaN p6 Amoy S6\n");
+  for (int k = 0; k < nw; k++) {
+    if (area[k].n < 2) {
+      continue;
+    }
+    std::printf("%g %zu %.6g %.6g %.6g %.6g %.6g\n", w, area[k].n, area[k].cv(), sides[k].sd(),
+                (double)hex[k] / (double)area[k].n, area[k].mean(), sumL[k] > 0 ? std::abs(z6[k]) / sumL[k] : 0.0);
+  }
+  return 0;
+}
+
 } // namespace
 
 int main(int argc, char *argv[]) {
   if (argc < 2) {
-    std::fprintf(stderr, "Usage : mesure cells1.txt [cells2.txt ...]\n        mesure -hist cells.txt\n");
+    std::fprintf(stderr, "Usage : mesure cells1.txt [cells2.txt ...]\n        mesure -hist cells.txt\n"
+                         "        mesure -windows w cells.txt\n");
     return 1;
   }
   try {
     if (!std::strcmp(argv[1], "-hist") && argc == 3) {
       return histograms(argv[2]);
+    }
+    if (!std::strcmp(argv[1], "-windows") && argc == 4) {
+      return windows(std::atof(argv[2]), argv[3]);
     }
     std::printf("iteration n cvA cvL sigmaN p6 SI G psi6 cvNN residu S6 S2 sigmaV deg3 aboav f57 paired t1 p5 p7\n");
     std::unordered_set<long long> prevPairs;

@@ -125,7 +125,8 @@ for k in 0 3 20 200; do
   inkscape work/vue_$k.svg --export-type=png --export-filename=figures/vue_$k.png -w 640 > /dev/null 2>&1
 done
 
-# --- 4. Rapport
+# --- 4. Rapport (la section « taille représentative » utilise les données de run_taille.sh)
+[ -f data/taille_tableau.tex ] || ./run_taille.sh
 latexmk -lualatex -interaction=nonstopmode -halt-on-error rapport.tex > work/latex.log 2>&1 \
   || { tail -30 work/latex.log; exit 1; }
 echo "rapport : rapport.pdf"

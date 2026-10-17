@@ -25,6 +25,10 @@
 \definecolor{cU}{HTML}{2D7DD2}
 \definecolor{cR}{HTML}{E0524D}
 \definecolor{cH}{HTML}{2E9E5B}
+\definecolor{k0}{HTML}{9A9AA3}
+\definecolor{k10}{HTML}{8EC3EE}
+\definecolor{k100}{HTML}{2D7DD2}
+\definecolor{k1000}{HTML}{14365F}
 
 % courbes d'un indicateur pour les trois états initiaux (abscisse : itérations + 1)
 \pgfplotsset{
@@ -60,7 +64,9 @@
   disparaissent très lentement ; ces défauts s'apparient de plus en plus (dislocations) et les réarrangements
   topologiques (transitions T1) deviennent rares, en $k^{-1.3}$. Les indicateurs se répartissent en trois
   familles : métrique, topologique (à laquelle se rattachent les angles aux sommets) et orientation à longue
-  portée, qui révèle des domaines d'orientations différentes grossissant lentement.
+  portée, qui révèle des domaines d'orientations différentes grossissant lentement. Un complément sur des tissus
+  de 80 à 130\,000 cellules donne la taille représentative des indicateurs et des ordres de grandeur pour
+  dimensionner une éprouvette de fissuration pré-entaillée.
 \end{abstract}
 
 %======================================================================
@@ -398,6 +404,178 @@ description quand on s'intéresse à la nature des défauts et à l'avancement d
 Le résidu germe--centroïde n'est pas un indicateur de désordre : il mesure la distance au point fixe.
 
 %======================================================================
+\section{Taille d'échantillon représentative}\label{sec:taille}
+%======================================================================
+
+Les résultats précédents portent sur des tissus d'environ 2000 cellules. Pour dimensionner des éprouvettes (par
+exemple pour des simulations de fissuration d'une éprouvette pré-entaillée sollicitée en traction), il faut savoir
+à partir de combien de cellules les indicateurs sont représentatifs. Un complément, limité au tirage uniforme
+suivi de Lloyd, répond en deux temps (\code{./run\_taille.sh}, environ 6 minutes) :
+\begin{itemize}
+  \item \textbf{effet de taille} : tissus carrés de côté $L=10$, 20, 40, 80 et 160 (de 80 à 32\,600 cellules, dont
+    55 à 31\,000 profondes), respectivement 40, 20, 10, 6 et 3 graines, $k=100$ ;
+  \item \textbf{fenêtres} : dans de grands tissus ($L=160$, 3 graines, $k=0$, 10, 100 et 1000 ; $L=320$, soit
+    130\,000 cellules, 1 graine, $k=100$), les indicateurs sont calculés dans des fenêtres carrées jointives de
+    côté $w$ allant de 2 à 128 diamètres (de 5 à 21\,000 cellules) : leur dispersion d'une fenêtre à l'autre dit
+    à partir de quelle taille une portion de tissu ressemble au tissu entier
+    (\code{./mesure -windows w fichier}).
+\end{itemize}
+
+\subsection{Effet de taille}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    \begin{axis}[width=0.48\linewidth,height=5cm,xmode=log,xlabel={cellules profondes},
+        ylabel={valeur / valeur à $L=160$},grid=major,grid style={gray!20},legend style={font=\scriptsize},
+        legend pos=south east,thick,mark size=1.2pt,error bars/y dir=both,error bars/y explicit]
+      \addplot[cU,mark=*] table[x=n,y expr=\thisrow{cvA}/0.0742145,y error expr=\thisrow{cvA_sd}/0.0742145]{data/taille_A.dat};
+      \addplot[cR,mark=square*] table[x=n,y expr=\thisrow{sigmaN}/0.46989,y error expr=\thisrow{sigmaN_sd}/0.46989]{data/taille_A.dat};
+      \addplot[cH,mark=triangle*] table[x=n,y expr=\thisrow{p6}/0.779458,y error expr=\thisrow{p6_sd}/0.779458]{data/taille_A.dat};
+      \legend{$\mathrm{cv}_A$,$\sigma_n$,$p_6$}
+    \end{axis}
+  \end{tikzpicture}\hfill
+  \begin{tikzpicture}
+    \begin{axis}[width=0.48\linewidth,height=5cm,xmode=log,ymode=log,xlabel={côté $L$ du tissu},
+        ylabel={$S_6$ (tissu entier)},grid=major,grid style={gray!20},legend style={font=\scriptsize},
+        legend pos=north east,thick,mark size=1.2pt,error bars/y dir=both,error bars/y explicit]
+      \addplot[k100,mark=*] table[x=L,y=S6,y error=S6_sd]{data/taille_A.dat};
+      \addplot[gray,dashed,domain=8:200,samples=2] {2.6/x};
+      \legend{$k=100$,$2.6/L$}
+    \end{axis}
+  \end{tikzpicture}
+  \caption{Effet de taille ($k=100$, moyenne et écart type entre graines). À gauche, indicateurs rapportés à leur
+    valeur pour $L=160$ ; à droite, ordre orientationnel global du tissu entier.}
+  \label{fig:tailleA}
+\end{figure}
+
+Les indicateurs topologiques sont presque insensibles à la taille : $\sigma_n$ et $p_6$ diffèrent de moins de
+4\,\% de leur valeur à $L=160$ dès $L=10$ (55 cellules profondes). $\mathrm{cv}_A$ est biaisé vers le bas pour les
+petits tissus (0.058 pour $L=10$, 0.072 pour $L=20$) et n'atteint sa valeur (0.074) qu'à partir de $L=40$, soit
+environ 1700 cellules profondes. La dispersion d'une graine à l'autre décroît comme $N^{-1/2}$ ($N$ : nombre de
+cellules) : pour $\sigma_n$, de $\pm0.065$ ($L=10$) à $\pm0.012$ ($L=40$) et $\pm0.001$ ($L=160$). En revanche, l'ordre
+global $S_6$ du tissu entier n'est pas une propriété du tissu mais de sa taille : il décroît comme $2.6/L$, ce
+qu'on attend de domaines d'orientations indépendantes de taille fixe (section~\ref{sec:domaines}).
+
+\subsection{Fenêtres : à partir de combien de cellules une portion de tissu est-elle représentative ?}
+
+\begin{figure}[H]
+  \centering
+  \newcommand{\fen}[3]{% #1 colonne, #2 libellé, #3 options
+    \begin{axis}[width=0.48\linewidth,height=4.8cm,xmode=log,ymode=log,xlabel={cellules par fenêtre},
+        ylabel={#2},grid=major,grid style={gray!20},legend style={font=\scriptsize},thick,mark size=1pt,#3]
+      \addplot[k10,mark=*,restrict expr to domain={\thisrow{nb}}{6:1e9}]
+        table[x=n,y expr=\thisrow{#1_sd}/\thisrow{#1}]{data/taille_B_10.dat};
+      \addplot[k100,mark=*,restrict expr to domain={\thisrow{nb}}{6:1e9}]
+        table[x=n,y expr=\thisrow{#1_sd}/\thisrow{#1}]{data/taille_B_100.dat};
+      \addplot[k1000,mark=*,restrict expr to domain={\thisrow{nb}}{6:1e9}]
+        table[x=n,y expr=\thisrow{#1_sd}/\thisrow{#1}]{data/taille_B_1000.dat};
+      \addplot[gray,dashed,domain=4:30000,samples=2] {1/sqrt(x)};
+    \end{axis}}
+  \begin{tikzpicture}\fen{Amoy}{dispersion de l'aire moyenne}{legend entries={$k=10$,$k=100$,$k=1000$,$1/\sqrt N$},
+      legend pos=south west}\end{tikzpicture}\hfill
+  \begin{tikzpicture}\fen{p6}{dispersion de $p_6$}{}\end{tikzpicture}\\[1mm]
+  \begin{tikzpicture}\fen{sigmaN}{dispersion de $\sigma_n$}{}\end{tikzpicture}\hfill
+  \begin{tikzpicture}\fen{cvA}{dispersion de $\mathrm{cv}_A$}{}\end{tikzpicture}
+  \caption{Dispersion relative (écart type / moyenne) d'un indicateur d'une fenêtre à l'autre, en fonction du
+    nombre moyen de cellules par fenêtre ($L=160$, 3 graines ; $L=320$ en plus pour $k=100$). En tirets,
+    $1/\sqrt N$ : fluctuation du nombre de points d'un tirage de Poisson.}
+  \label{fig:fenetres}
+\end{figure}
+
+\begin{table}[H]
+  \centering
+  \input{data/taille_tableau.tex}
+  \caption{Nombre de cellules d'une fenêtre pour que la dispersion relative d'un indicateur d'une fenêtre à l'autre
+    descende sous 5\,\% et sous 2\,\% (interpolation entre les fenêtres de la figure~\ref{fig:fenetres}).}
+  \label{tab:taille}
+\end{table}
+
+\begin{itemize}
+  \item \textbf{Topologie} ($p_6$, $\sigma_n$). Les fluctuations d'une fenêtre à l'autre suivent exactement une loi en
+    $N^{-1/2}$ : pour $k=100$, dispersion relative de $p_6\simeq0.58/\sqrt N$ et de $\sigma_n\simeq1.05/\sqrt N$ (le
+    coefficient vaut 0.9 et 0.7 pour $k=10$, 0.46 et 1.6 pour $k=1000$). Les défauts sont donc répartis sans
+    corrélation à grande distance : une portion de quelques centaines de cellules est représentative à 5\,\%
+    près (tableau~\ref{tab:taille}). La dispersion relative de $\sigma_n$ augmente avec $k$ simplement parce que
+    $\sigma_n$ diminue, alors que ses fluctuations absolues ne diminuent pas autant.
+  \item \textbf{Densité} (aire moyenne des cellules d'une fenêtre). À petite échelle, Lloyd rend la densité bien
+    plus uniforme qu'un tirage de Poisson (pour $k=100$, des fenêtres de 80 cellules fluctuent 2.3 fois moins que
+    $1/\sqrt N$) ; à grande échelle, en revanche, les fluctuations rejoignent presque celles d'un tirage de
+    Poisson : Lloyd déplace chaque germe localement et n'efface les variations de densité du tirage initial que sur
+    une distance qui croît avec le nombre d'itérations (le rapport à $1/\sqrt N$ atteint 0.5 vers
+    $w\approx4$, 10 et 28 diamètres pour $k=10$, 100 et 1000). La densité moyenne d'une éprouvette de $N$ cellules
+    fluctue donc encore d'environ $1/\sqrt N$ d'une graine à l'autre (1.4\,\% pour 5000 cellules).
+  \item \textbf{Hétérogénéité des aires} ($\mathrm{cv}_A$). C'est l'indicateur le plus lent : calculé dans une petite
+    fenêtre, il sous-estime la valeur du tissu (de 0.039 pour $w=2$ à 0.073 pour $w=128$ à $k=100$), car une partie de
+    la dispersion des aires vient des variations de densité à grande échelle ; il faut quelques milliers à
+    10\,000 cellules pour qu'il soit stable à 5\,\% près. Comme $\mathrm{cv}_A$ reste petit après une centaine
+    d'itérations (0.07), cette lenteur a peu de conséquences en valeur absolue.
+\end{itemize}
+
+\subsection{Taille des domaines d'orientation}\label{sec:domaines}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    \begin{axis}[width=0.6\linewidth,height=5cm,xmode=log,xlabel={côté $w$ de la fenêtre (diamètres de cellule)},
+        ylabel={$\ell_6=w\,S_6(w)$},grid=major,grid style={gray!20},legend style={font=\scriptsize},
+        legend pos=outer north east,thick,mark size=1.2pt]
+      \addplot[k0,mark=*,restrict expr to domain={\thisrow{nb}}{6:1e9}] table[x=w,y expr=\thisrow{w}*\thisrow{S6}]{data/taille_B_0.dat};
+      \addplot[k10,mark=*,restrict expr to domain={\thisrow{nb}}{6:1e9}] table[x=w,y expr=\thisrow{w}*\thisrow{S6}]{data/taille_B_10.dat};
+      \addplot[k100,mark=*,restrict expr to domain={\thisrow{nb}}{6:1e9}] table[x=w,y expr=\thisrow{w}*\thisrow{S6}]{data/taille_B_100.dat};
+      \addplot[k1000,mark=*,restrict expr to domain={\thisrow{nb}}{6:1e9}] table[x=w,y expr=\thisrow{w}*\thisrow{S6}]{data/taille_B_1000.dat};
+      \legend{$k=0$,$k=10$,$k=100$,$k=1000$}
+    \end{axis}
+  \end{tikzpicture}
+  \caption{Longueur d'orientation $\ell_6=w\,S_6(w)$, $S_6(w)$ étant l'ordre orientationnel des parois d'une fenêtre
+    de côté $w$ (moyenne sur les fenêtres). Le plateau donne la taille des domaines d'orientation, en diamètres de
+    cellule.}
+  \label{fig:domaines}
+\end{figure}
+
+Dans une fenêtre bien plus grande que les domaines d'orientation, $S_6$ moyenne les orientations de
+$(w/d)^2$ domaines indépendants de taille $d$ et vaut environ $d/w$ : $\ell_6=w\,S_6(w)$ atteint alors un plateau
+égal à la taille des domaines. Sans itération ($k=0$), le plateau vaut 0.5 : c'est le niveau d'orientations non
+corrélées d'une paroi à l'autre. Il vaut ensuite 0.9 pour $k=10$, 2.6 pour $k=100$ et 5.2 pour $k=1000$
+diamètres de cellule, atteint pour des fenêtres de quelques fois $\ell_6$ (figure~\ref{fig:domaines}). La valeur
+pour $k=100$ est celle de l'effet de taille ($S_6\simeq2.6/L$, figure~\ref{fig:tailleA}). Les domaines
+grossissent donc lentement, d'un facteur 2 à 3 par décade d'itérations, mais restent petits : quelques
+cellules de côté.
+
+\subsection{Conséquences pour une éprouvette de fissuration pré-entaillée}
+
+Une simulation de fissuration d'une éprouvette pré-entaillée tirée en traction sollicite surtout les cellules
+situées en pointe d'entaille, puis celles que traverse la fissure dans le ligament. Les mesures précédentes
+donnent des ordres de grandeur pour dimensionner l'éprouvette, avec les réserves indiquées ensuite.
+\begin{itemize}
+  \item \textbf{Ligament et orientation.} Pour que la fissure ne soit pas guidée par un seul domaine d'orientation
+    (dont les parois forment des chemins alignés), le ligament doit être grand devant $\ell_6$ : au moins
+    10~$\ell_6$, soit environ 10, 25 et 50 diamètres de cellule pour $k=10$, 100 et 1000.
+  \item \textbf{Bande traversée par la fissure.} Une fissure qui traverse un ligament de longueur $l$ explore une bande
+    de quelques cellules de large, soit $N\approx3l/A_0\approx3.8\,l$ cellules pour une bande de trois diamètres
+    de large ($l$ en diamètres de cellule). Avec les lois en $N^{-1/2}$ ci-dessus, la fraction d'hexagones de cette
+    bande est à 5\,\% de sa valeur moyenne pour $N\approx130$ cellules à $k=100$ (environ 35 diamètres de
+    ligament), à 10\,\% dès $N\approx35$ (une dizaine de diamètres).
+  \item \textbf{Bords.} Les deux premières couronnes de cellules le long d'un bord sont perturbées
+    (section~2) : les mors et les bords libres doivent être à quelques cellules de la zone utile.
+  \item \textbf{Ordre de grandeur.} Pour un tissu à $k\approx100$ et une entaille sur la moitié de la largeur, une
+    largeur de 80 à 100 diamètres de cellule (ligament de 40 à 50 diamètres, environ 15 à 20~$\ell_6$) et une
+    hauteur du même ordre donnent 8000 à 13\,000 cellules : les indicateurs moyens de l'éprouvette sont alors
+    représentatifs à mieux que 2\,\% (tableau~\ref{tab:taille}), y compris $\mathrm{cv}_A$ à environ 5\,\%.
+  \item \textbf{Plusieurs graines dans tous les cas.} L'amorçage dépend des quelques cellules en pointe d'entaille,
+    dont la configuration est aléatoire quelle que soit la taille de l'éprouvette : la dispersion de la charge à
+    rupture d'une graine à l'autre ne disparaît pas avec la taille. Il faut donc plusieurs réalisations (au moins 5
+    à 10) pour estimer la réponse moyenne et sa dispersion.
+\end{itemize}
+\textbf{Réserves.} Ces critères portent sur la \emph{microstructure} ; ils ne garantissent pas que la
+\emph{réponse en fissuration} soit représentative. En rupture, il n'existe d'ailleurs pas de volume représentatif
+au sens strict : la résistance d'une éprouvette entaillée dépend de sa taille (effet d'échelle des matériaux
+quasi fragiles). La taille retenue doit donc être confirmée par des simulations de fissuration sur deux ou trois
+tailles, avec plusieurs graines, en vérifiant que les grandeurs d'intérêt (énergie de rupture, trajet de fissure)
+ne dépendent plus de la taille. Ces mesures concernent aussi le seul tirage uniforme suivi de Lloyd : avec des
+bundles, la distance entre bundles introduit une échelle supplémentaire, qu'il faudrait mesurer de la même façon.
+
+%======================================================================
 \section{Conclusions et pistes}
 %======================================================================
 
@@ -411,6 +589,12 @@ Le résidu germe--centroïde n'est pas un indicateur de désordre : il mesure la
   \item Les défauts restants sont des dislocations (pentagones et heptagones accolés, $E_{57}$ croissant) qui
     séparent des domaines hexagonaux d'orientations différentes ($S_6$ faible) ; la topologie évolue de moins en
     moins ($\tau_{T1}\propto k^{-1.3}$).
+  \item Les fluctuations topologiques d'une portion de tissu suivent une loi en $N^{-1/2}$ (quelques centaines
+    de cellules suffisent à 5\,\%) ; la densité garde à grande échelle des fluctuations de type Poisson ; les
+    domaines d'orientation mesurent 1 à 5 diamètres de cellule ($k=10$ à 1000). Pour une éprouvette pré-entaillée,
+    un ligament de 40 à 50 diamètres (8000 à 13\,000 cellules au total) rend la microstructure représentative,
+    mais plusieurs graines restent nécessaires et la taille doit être confirmée par des simulations de
+    fissuration (section~\ref{sec:taille}).
   \item Deux nombres décrivent l'essentiel du désordre : un métrique ($\mathrm{cv}_A$ ou $G$) et un topologique
     ($\sigma_n$ ou $p_6$) ; l'ordre orientationnel global $S_6$ s'y ajoute quand l'alignement des domaines
     importe.
