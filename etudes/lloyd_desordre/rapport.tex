@@ -49,14 +49,18 @@
 
 \begin{abstract}
   Les itérations de Lloyd rendent un pavage de Voronoï de plus en plus régulier, mais à quelle vitesse, et
-  jusqu'où ? On suit ici, sans bundles ($\alpha=0$), neuf indicateurs de désordre (dispersion des aires et des
-  longueurs de paroi, nombre de côtés, ordre orientationnel, énergie de Lloyd\dots) pour trois états initiaux, de
-  0 à 1000 itérations, sur des tissus d'environ 2000 cellules et cinq graines. Le désordre décroît d'abord très
+  jusqu'où ? On suit ici, sans bundles ($\alpha=0$), une quinzaine d'indicateurs de désordre pour trois états
+  initiaux, de 0 à 1000 itérations, sur des tissus d'environ 2000 cellules et cinq graines : tailles et formes
+  (dispersion des aires et des longueurs de paroi, énergie de Lloyd), topologie (nombre de côtés), orientation
+  des parois (angles aux sommets, ordre orientationnel global) et connectivité (corrélations entre voisins,
+  appariement des défauts, transitions T1). Le désordre décroît d'abord très
   vite (une dizaine d'itérations divise par trois la dispersion des aires d'un tirage uniforme), puis lentement,
   en loi de puissance de faible exposant : partant d'un tirage aléatoire, Lloyd ne retrouve pas le réseau
   hexagonal mais un état centroïdal avec des défauts topologiques (paires pentagone--heptagone) qui
-  disparaissent très lentement. Les indicateurs se répartissent en deux familles, métrique et topologique, qui
-  évoluent à des vitesses différentes ; deux nombres suffisent à décrire le désordre.
+  disparaissent très lentement ; ces défauts s'apparient de plus en plus (dislocations) et les réarrangements
+  topologiques (transitions T1) deviennent rares, en $k^{-1.3}$. Les indicateurs se répartissent en trois
+  familles : métrique, topologique (à laquelle se rattachent les angles aux sommets) et orientation à longue
+  portée, qui révèle des domaines d'orientations différentes grossissant lentement.
 \end{abstract}
 
 %======================================================================
@@ -86,8 +90,9 @@ cd etudes/lloyd_desordre
 ./run.sh        # compile cellyod et mesure, simulations, mesures, figures, ce rapport
 \end{lstlisting}
 Les réglages (taille, états, graines, points de contrôle) sont en tête de \code{run.sh}. Les indicateurs sont
-calculés par \code{mesure} (\code{mesure.cpp}, 140 lignes), qui relit les fichiers de cellules avec
-le cœur de \code{cellyod} : \code{./mesure work/*.txt} donne une ligne d'indicateurs par fichier.
+calculés par \code{mesure} (\code{mesure.cpp}, environ 330 lignes), qui relit les fichiers de cellules avec
+le cœur de \code{cellyod} : \code{./mesure work/*.txt} donne une ligne d'indicateurs par fichier, et
+\code{./mesure -hist fichier} les histogrammes des angles aux sommets et des orientations de paroi.
 
 %======================================================================
 \section{Indicateurs de désordre}
@@ -108,6 +113,25 @@ indicateurs prennent alors exactement leur valeur de référence (dernière lign
   \item \textbf{Topologiques} : $\sigma_n$, écart type du nombre de côtés (0 pour un pavage hexagonal) ; $p_6$,
     fraction d'hexagones ; $\psi_6=\langle|\frac1{n_i}\sum_j e^{6i\theta_{ij}}|\rangle$, ordre orientationnel
     local, $\theta_{ij}$ étant l'angle du germe $j$, voisin de Voronoï de $i$ (1 pour un réseau hexagonal) ;
+  \item \textbf{Orientation des parois} ($\theta_e\in[0,\pi[$ : angle de la paroi $e$, de longueur $l_e$, avec
+    l'axe $x$) :
+    $S_6=|\sum_e l_e e^{6i\theta_e}|/\sum_e l_e$, ordre orientationnel \emph{global}, qui vaut 1 si toutes les
+    parois suivent les trois directions d'un même réseau hexagonal et tend vers 0 si les orientations sont
+    réparties au hasard ou en domaines d'orientations différentes (alors que $\psi_6$ est un ordre \emph{local}) ;
+    $S_2=|\sum_e l_e e^{2i\theta_e}|/\sum_e l_e$, anisotropie (0 sans direction privilégiée) ;
+    $\sigma_V$, écart type des angles entre parois consécutives aux sommets (tous à $120^\circ$ pour un pavage
+    hexagonal régulier : $\sigma_V=0$) ;
+  \item \textbf{Connectivité} :
+    paramètre $a$ de la loi d'Aboav--Weaire $n\,m(n)=(6-a)\,n+6a+\mu_2$, où $m(n)$ est le nombre moyen de côtés
+    des voisins d'une cellule à $n$ côtés et $\mu_2=\sigma_n^2$ (régression sur les cellules ; $a>0$ : les cellules
+    à beaucoup de côtés sont entourées de cellules à peu de côtés, et inversement) ;
+    $f_{57}$, fraction des parois séparant un pentagone et un heptagone, et l'\emph{enrichissement}
+    $E_{57}=f_{57}/(2q_5q_7)$, rapport à la valeur attendue si les défauts étaient placés indépendamment
+    ($q_n=np_n/6$ : fraction des extrémités de paroi sur une cellule à $n$ côtés ; $E_{57}=1$ sans corrélation,
+    $E_{57}>1$ : pentagones et heptagones accolés) ;
+    $\tau_{T1}$, nombre de transitions T1 (une paire de voisins perdue, une gagnée) par cellule et par itération
+    entre deux points de contrôle, compté sur les voisinages entre cellules profondes ; il mesure l'activité
+    topologique. Enfin, la fraction de sommets de degré 3 sert de contrôle (pavage de Voronoï générique : 1) ;
   \item \textbf{Convergence} : résidu $\langle\|\vect p_i-\vect c_i\|\rangle/s$, distance moyenne entre un germe et
     le centroïde de sa cellule ($s$ : espacement visé) ; il est nul au point fixe de Lloyd (tessellation
     centroïdale), que celle-ci soit ordonnée ou non.
@@ -115,7 +139,9 @@ indicateurs prennent alors exactement leur valeur de référence (dernière lign
 
 \textbf{Contrôle.} Pour le tirage uniforme sans itération (pavage de Voronoï--Poisson), on mesure
 $\mathrm{cv}_A=0.538$, $\sigma_n=1.341$ et $p_6=0.297$, proches des valeurs connues pour un domaine infini
-(environ 0.53, 1.33 et 0.29).
+(environ 0.53, 1.33 et 0.29). Tous les sommets des cellules profondes sont de degré 3, à tous les points de
+contrôle ; $S_2$ reste inférieur à $0.008$ partout : aucun tissu n'a de direction privilégiée, le carré
+n'imposant pas d'anisotropie.
 
 %======================================================================
 \section{Résultats}
@@ -210,6 +236,114 @@ soit 48.5 rangées sur la hauteur, un nombre non entier. Entre $k=150$ et $k=100
 un effet de l'ordre de l'écart type entre graines ; une explication possible, non vérifiée ici, est la migration
 de dislocations du bord vers les cellules profondes.
 
+\subsection{Orientation des parois et connectivité}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}\courbes{sigmaV}{ymode=log,ylabel={$\sigma_V$ (degrés)},
+      legend entries={\code{uniform},\code{random},\code{hex}},legend pos=south west}\end{tikzpicture}\hfill
+  \begin{tikzpicture}\courbes{S6}{ylabel={$S_6$},ymin=0,ymax=1.05}\end{tikzpicture}\\[1mm]
+  \begin{tikzpicture}\courbes{aboav}{ylabel={$a$ (Aboav--Weaire)}}\end{tikzpicture}\hfill
+  \begin{tikzpicture}
+    \begin{axis}[etude,xmode=log,ymode=log,ylabel={$E_{57}=f_{57}/(2q_5q_7)$}]
+      \addplot[cU,mark=*] table[x expr=\thisrow{iteration}+1,
+        y expr=\thisrow{f57}/(2*5/6*\thisrow{p5}*7/6*\thisrow{p7})]{data/uniform.dat};
+      \addplot[cR,mark=square*] table[x expr=\thisrow{iteration}+1,
+        y expr=\thisrow{f57}/(2*5/6*\thisrow{p5}*7/6*\thisrow{p7})]{data/random.dat};
+      \addplot[cH,mark=triangle*] table[x expr=\thisrow{iteration}+1,
+        y expr=\thisrow{f57}/(2*5/6*\thisrow{p5}*7/6*\thisrow{p7})]{data/hex.dat};
+    \end{axis}
+  \end{tikzpicture}\\[1mm]
+  \begin{tikzpicture}
+    \begin{axis}[etude,xmode=log,ymode=log,ylabel={$\tau_{T1}$ (par cellule et itération)},
+        unbounded coords=discard,filter discard warning=false]
+      \addplot[cU,mark=*] table[x expr=\thisrow{iteration}+1,y expr={\thisrow{iteration}>0 ? \thisrow{t1} : nan},
+        y error=t1_sd]{data/uniform.dat};
+      \addplot[cR,mark=square*] table[x expr=\thisrow{iteration}+1,y expr={\thisrow{iteration}>0 ? \thisrow{t1} : nan},
+        y error=t1_sd]{data/random.dat};
+      \addplot[cH,mark=triangle*] table[x expr=\thisrow{iteration}+1,y expr={\thisrow{iteration}>0 ? \thisrow{t1} : nan},
+        y error=t1_sd]{data/hex.dat};
+    \end{axis}
+  \end{tikzpicture}\hfill
+  \begin{tikzpicture}\courbes{S2}{ymode=log,ylabel={$S_2$}}\end{tikzpicture}
+  \caption{Orientation des parois et connectivité en fonction du nombre d'itérations (moyenne et écart type sur
+    5 graines). $\tau_{T1}$ est le taux moyen entre deux points de contrôle, porté au point de contrôle d'arrivée.}
+  \label{fig:orientation}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    \begin{axis}[width=0.48\linewidth,height=5cm,xlabel={angle entre parois consécutives (degrés)},
+        ylabel={densité},xmin=40,xmax=200,grid=major,grid style={gray!20},thick,no marks,
+        legend style={font=\scriptsize,at={(0.5,1.03)},anchor=south,legend columns=2}]
+      \addplot[cU!45] table[x=angle,y=sommets]{data/hist_uniform_s1_0000.dat};
+      \addplot[cU!75] table[x=angle,y=sommets]{data/hist_uniform_s1_0010.dat};
+      \addplot[cU] table[x=angle,y=sommets]{data/hist_uniform_s1_1000.dat};
+      \addplot[cH] table[x=angle,y=sommets]{data/hist_hex_s1_1000.dat};
+      \legend{\code{uniform} $k=0$,\code{uniform} $k=10$,\code{uniform} $k=1000$,\code{hex} $k=1000$}
+    \end{axis}
+  \end{tikzpicture}\hfill
+  \begin{tikzpicture}
+    \begin{axis}[width=0.48\linewidth,height=5cm,xlabel={orientation des parois $\theta$ (degrés)},
+        ylabel={densité (pondérée par $l$)},xmin=0,xmax=180,xtick={0,30,60,90,120,150,180},grid=major,
+        grid style={gray!20},thick,no marks,ymode=log,
+        legend style={font=\scriptsize,at={(0.5,1.03)},anchor=south,legend columns=2}]
+      \addplot[cU] table[x=angle,y=parois]{data/hist_uniform_s1_1000.dat};
+      \addplot[cH] table[x=angle,y=parois,unbounded coords=discard]{data/hist_hex_s1_1000.dat};
+      \legend{\code{uniform} $k=1000$,\code{hex} $k=1000$}
+    \end{axis}
+  \end{tikzpicture}
+  \caption{Histogrammes (graine 1, classes de $2^\circ$). À gauche, angles entre parois consécutives aux sommets ;
+    à droite, orientation des parois (densité uniforme : $1/180$).}
+  \label{fig:histos}
+\end{figure}
+
+\begin{table}[H]
+  \centering
+  \input{data/tableau2.tex}
+  \caption{Orientation et connectivité : valeurs moyennes (5 graines) à quelques points de contrôle ; $a$ : paramètre
+    d'Aboav--Weaire ; $\tau_{T1}$ : transitions T1 par cellule et par itération entre le point de contrôle précédent et
+    celui-ci.}
+  \label{tab:orientation}
+\end{table}
+
+\textbf{Angles aux sommets.} Pour le tirage uniforme, la distribution des angles entre parois consécutives est très
+large au départ (de quelques degrés à près de $180^\circ$, $\sigma_V=30^\circ$) ; elle se resserre autour de
+$120^\circ$ pendant le régime rapide ($\sigma_V=13^\circ$ à $k=10$), puis lentement ($5.8^\circ$ à $k=1000$,
+$\sigma_V\propto k^{-0.17}$ entre 20 et 1000 itérations ; figures~\ref{fig:orientation} et \ref{fig:histos}). Le
+cristal perturbé atteint $2.4^\circ$ en une centaine d'itérations puis reste sur ce plateau. Les sommets sont donc de
+plus en plus réguliers, mais les angles éloignés de $120^\circ$ qui subsistent sont ceux des défauts :
+$\sigma_V$ suit $\sigma_n$ de très près ($r=0.98$).
+
+\textbf{Orientation à longue portée.} Les angles locaux ne disent rien de l'alignement d'une région à l'autre. Pour
+les tirages aléatoires, $S_6$ reste faible : il croît lentement de 0.01--0.02 à 0.14--0.15 à $k=1000$, avec une
+forte dispersion entre graines ($\pm0.05$ à $\pm0.08$). Le tissu est formé de domaines hexagonaux d'orientations
+différentes, séparés par des joints ; leur lent grossissement fait croître $S_6$, et la dispersion entre graines
+traduit le petit nombre de domaines dans le carré. L'orientation des parois reste d'ailleurs presque uniforme
+(figure~\ref{fig:histos}, à droite). Le cristal perturbé, lui, retrouve l'orientation de son réseau de départ :
+$S_6=0.63$ dès $k=10$ et $0.96$ à $k=100$, ses parois se concentrant autour de $30^\circ$, $90^\circ$ et
+$150^\circ$. C'est la différence la plus nette entre les deux familles d'états initiaux : $\psi_6$ (ordre local)
+atteint 0.84 pour le tirage uniforme à $k=1000$, mais $S_6$ (ordre global) seulement 0.14.
+
+\textbf{Corrélations entre voisins.} Le paramètre d'Aboav--Weaire mesure pour le tirage uniforme initial
+$a=0.65$ ; il augmente pendant le régime rapide jusqu'à environ 1.3--1.4 puis reste presque constant, pour les trois
+états initiaux (le cristal perturbé, qui a très peu de défauts, donne une valeur plus dispersée, $1.5\pm0.1$ à
+$k=1000$). Les itérations renforcent donc l'anticorrélation entre voisins (les cellules à beaucoup de côtés
+s'entourent de cellules à peu de côtés), puis la conservent alors que le nombre de défauts diminue.
+
+\textbf{Appariement des défauts.} Au départ, la fraction de parois pentagone--heptagone est celle qu'on attendrait
+au hasard ($E_{57}=1.1$ pour le tirage uniforme, $1.3$ pour les deux autres) ; l'enrichissement croît ensuite
+régulièrement, jusqu'à $E_{57}=3.5$ à $k=1000$ pour les deux tirages aléatoires et 18 pour le cristal perturbé :
+les pentagones et heptagones restants sont accolés, ce qui confirme qu'il s'agit de dislocations
+(figure~\ref{fig:vues}).
+
+\textbf{Activité topologique.} Les transitions T1 sont nombreuses au début (0.12 par cellule et par itération entre
+$k=0$ et $k=1$ pour le tirage uniforme) puis de plus en plus rares, en $\tau_{T1}\propto k^{-1.3}$ entre 20 et
+1000 itérations ($1.8\times10^{-5}$ à $k=1000$, soit environ une transition toutes les 30 itérations sur
+l'ensemble des 1700 cellules profondes). Pour le cristal perturbé, elles cessent presque ($10^{-6}$). La topologie est donc presque figée bien
+avant que les indicateurs ne cessent d'évoluer : leur lente évolution tardive passe par de rares réarrangements.
+
 \subsection{Quels indicateurs retenir ?}
 
 \begin{figure}[H]
@@ -236,21 +370,31 @@ de dislocations du bord vers les cellules profondes.
   \label{fig:correlations}
 \end{figure}
 
-Sur l'ensemble des points (3 états, 19 points de contrôle), les indicateurs forment deux familles
+Sur l'ensemble des points (3 états, 19 points de contrôle), les indicateurs forment trois familles
 (figure~\ref{fig:correlations}, coefficients de corrélation linéaire $r$) :
 \begin{itemize}
   \item \textbf{topologique} : $\sigma_n$, $p_6$, $\psi_6$ et, plus surprenant, $\mathrm{cv}_L$ sont presque
     équivalents ($|r|\ge0.96$ deux à deux, $0.985$ entre $\mathrm{cv}_L$ et $\sigma_n$) : la dispersion des
-    longueurs de paroi vient vraisemblablement surtout des parois courtes qui entourent les défauts. Ils mesurent la densité de défauts et évoluent lentement ;
+    longueurs de paroi vient vraisemblablement surtout des parois courtes qui entourent les défauts. La
+    dispersion des angles aux sommets $\sigma_V$ en fait aussi partie ($r=0.98$ avec $\sigma_n$ et
+    $\mathrm{cv}_L$). Ils mesurent la densité de défauts et évoluent lentement ;
   \item \textbf{métrique} : $\mathrm{cv}_A$, $\mathrm{cv}_{NN}$, $G$ et $\langle SI\rangle$ mesurent l'hétérogénéité
     des tailles et des formes ($|r|\ge0.94$ entre $\mathrm{cv}_A$, $\mathrm{cv}_{NN}$ et $\langle SI\rangle$) ; ils
     chutent pendant le régime rapide et sont moins liés à la topologie ($r=0.89$ entre $\mathrm{cv}_A$ et
-    $\sigma_n$, $0.72$ entre $G$ et $\sigma_n$, avec une relation qui dépend de l'état initial).
+    $\sigma_n$, $0.72$ entre $G$ et $\sigma_n$, avec une relation qui dépend de l'état initial) ;
+  \item \textbf{orientation à longue portée} : $S_6$ ne se déduit pas des précédents ($r=0.74$ avec $\psi_6$,
+    corrélation due au seul cristal perturbé) : à densité de défauts égale, il distingue un monocristal d'un
+    tissu en domaines.
 \end{itemize}
+Les indicateurs de connectivité décrivent plutôt la \emph{structure} des défauts et la \emph{dynamique} :
+$E_{57}$ dit si les défauts sont isolés ou appariés, $a$ comment les cellules voisines se répartissent les côtés,
+$\tau_{T1}$ si la topologie évolue encore.
 Pour décrire le désordre d'un pavage, un couple suffit : \textbf{un indicateur métrique}, de préférence
 $\mathrm{cv}_A$ (le plus simple, déjà calculé par \code{cellyod}) ou $G-G_{\mathrm{hex}}$ (lié directement à
-l'énergie de Lloyd), et \textbf{un indicateur topologique}, $\sigma_n$ ou $1-p_6$ (simples, sans paramètre).
-$\psi_6$ apporte en plus l'information d'orientation (domaines et joints), mais demande les voisinages.
+l'énergie de Lloyd), et \textbf{un indicateur topologique}, $\sigma_n$ ou $1-p_6$ (simples, sans paramètre) ;
+on y ajoute $S_6$ dès que l'orientation compte (domaines et joints). $\psi_6$ et $\sigma_V$ n'apportent pas
+d'information supplémentaire par rapport à $\sigma_n$ ; $E_{57}$ et $\tau_{T1}$ complètent utilement la
+description quand on s'intéresse à la nature des défauts et à l'avancement du calcul.
 Le résidu germe--centroïde n'est pas un indicateur de désordre : il mesure la distance au point fixe.
 
 %======================================================================
@@ -264,13 +408,18 @@ Le résidu germe--centroïde n'est pas un indicateur de désordre : il mesure la
   \item Le nombre d'itérations est donc un réglage du désordre : quelques itérations pour un tissu encore varié,
     quelques dizaines pour des cellules régulières mais une topologie désordonnée ; pour un tissu presque
     hexagonal, mieux vaut partir d'un réseau perturbé (\code{hex}) que d'un tirage aléatoire.
-  \item Deux nombres suffisent à décrire le désordre : un métrique ($\mathrm{cv}_A$ ou $G$) et un topologique
-    ($\sigma_n$ ou $p_6$).
+  \item Les défauts restants sont des dislocations (pentagones et heptagones accolés, $E_{57}$ croissant) qui
+    séparent des domaines hexagonaux d'orientations différentes ($S_6$ faible) ; la topologie évolue de moins en
+    moins ($\tau_{T1}\propto k^{-1.3}$).
+  \item Deux nombres décrivent l'essentiel du désordre : un métrique ($\mathrm{cv}_A$ ou $G$) et un topologique
+    ($\sigma_n$ ou $p_6$) ; l'ordre orientationnel global $S_6$ s'y ajoute quand l'alignement des domaines
+    importe.
 \end{itemize}
 \textbf{Pistes.} Effet de la taille du domaine (le plateau de \code{hex} dépend vraisemblablement de
 l'incompatibilité entre le réseau et le carré ; à tester avec plusieurs tailles, ou avec une forme circulaire
 via \code{shape}) ; plus de graines pour préciser les exposants ; recuit (petite perturbation des germes puis
-Lloyd) pour éliminer les dislocations ; mêmes mesures avec des bundles, pour séparer le désordre imposé par
+Lloyd) pour éliminer les dislocations ; taille des domaines d'orientation (fonction de corrélation de $\psi_6$ en
+fonction de la distance) pour suivre leur grossissement ; mêmes mesures avec des bundles, pour séparer le désordre imposé par
 l'attraction de celui hérité de l'état initial.
 
 \end{document}

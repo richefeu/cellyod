@@ -76,6 +76,28 @@ done
   echo '\bottomrule'
   echo '\end{tabular}'
 } > data/tableau.tex
+# second tableau : orientation des parois et connectivité
+{
+  echo '\begin{tabular}{@{}lrrrrrrr@{}}'
+  echo '\toprule'
+  echo 'État & $k$ & $S_6$ & $S_2$ & $\sigma_V$ (°) & $a$ & $f_{57}$ & $\tau_{T1}$ \\'
+  for st in $STATES; do
+    echo '\midrule'
+    awk -v st=$st 'NR == 1 { for (i = 1; i <= NF; i++) c[$i] = i; next }
+      $1 == 0 || $1 == 10 || $1 == 100 || $1 == 1000 {
+        printf "%s & %d & %.3f & %.4f & %.1f & %.2f & %.3f & %s \\\\\n", ($1 == 0 ? "\\code{" st "}" : ""), $1,
+          $(c["S6"]), $(c["S2"]), $(c["sigmaV"]), $(c["aboav"]), $(c["f57"]),
+          ($1 == 0 ? "--" : sprintf("%.1e", $(c["t1"]))) }' data/$st.dat
+  done
+  echo '\midrule'
+  echo 'hexagonal parfait & & 1 & 0 & 0 & -- & 0 & -- \\'
+  echo '\bottomrule'
+  echo '\end{tabular}'
+} > data/tableau2.tex
+# histogrammes des angles aux sommets et des orientations de paroi (graine 1)
+for f in uniform_s1_0000 uniform_s1_0010 uniform_s1_1000 hex_s1_1000; do
+  ./mesure -hist work/$f.txt > data/hist_$f.dat
+done
 # référence : pavage hexagonal parfait
 $C Lx=$L Ly=$L lattice=hex disorder=0 lloydIterations=0 output=work/parfait.txt svg=none > /dev/null
 ./mesure work/parfait.txt > data/parfait.dat
