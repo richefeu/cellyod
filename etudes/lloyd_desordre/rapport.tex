@@ -9,6 +9,7 @@
 \usepackage{subcaption}
 \usepackage{float}
 \usepackage{pgfplots}
+\usetikzlibrary{arrows.meta,calc,decorations.pathreplacing}
 \pgfplotsset{compat=1.18}
 \usepackage[margin=2.2cm]{geometry}
 \usepackage{xcolor}
@@ -148,6 +149,65 @@ $\mathrm{cv}_A=0.538$, $\sigma_n=1.341$ et $p_6=0.297$, proches des valeurs conn
 (environ 0.53, 1.33 et 0.29). Tous les sommets des cellules profondes sont de degré 3, à tous les points de
 contrôle ; $S_2$ reste inférieur à $0.008$ partout : aucun tissu n'a de direction privilégiée, le carré
 n'imposant pas d'anisotropie.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[scale=1.15,>=Stealth]
+    % (a) angles aux sommets
+    \begin{scope}
+      \draw[very thick] (0,0) -- (90:1.1) (0,0) -- (200:1.1) (0,0) -- (330:1.1);
+      \draw[cR,thick] (90:0.45) arc (90:200:0.45) node[pos=0.5,left=1pt,font=\scriptsize] {$110^\circ$};
+      \draw[cU,thick] (200:0.6) arc (200:330:0.6) node[pos=0.5,below=1pt,font=\scriptsize] {$130^\circ$};
+      \draw[cH,thick] (330:0.45) arc (-30:90:0.45) node[pos=0.5,right=1pt,font=\scriptsize] {$120^\circ$};
+      \fill (0,0) circle (1.6pt);
+      \node[font=\small] at (0,-1.45) {(a) angles aux sommets};
+    \end{scope}
+    % (b) voisins de Voronoï, angles theta_ij et orientation d'une paroi
+    \begin{scope}[xshift=3.4cm]
+      \foreach \a in {5,62,118,185,245,298} {\draw[gray] (0,0) -- (\a:1); \fill[gray] (\a:1) circle (1.6pt);}
+      \fill (0,0) circle (2pt);
+      \draw[->,cU,thick] (0.35,0) arc (0:62:0.35) node[pos=0.6,right=2pt,font=\scriptsize] {$\theta_{ij}$};
+      \draw[gray,dashed] (0,0) -- (0.7,0);
+      \draw[cR,very thick] ($(62:0.5)+(152:0.38)$) -- ($(62:0.5)+(-28:0.38)$);
+      \node[cR,font=\scriptsize] at (0.95,0.75) {paroi};
+      \node[font=\scriptsize,align=center] at (0,-1.3) {$\psi_6=\bigl|\frac1n\sum_j e^{6i\theta_{ij}}\bigr|$};
+      \node[font=\small] at (0,-1.7) {(b) voisins et parois};
+    \end{scope}
+    % (c) transition T1
+    \begin{scope}[xshift=6.6cm,scale=0.75]
+      \draw[very thick] (0,0.35) -- (0,-0.35) (0,0.35) -- (-0.8,0.95) (0,0.35) -- (0.8,0.95)
+        (0,-0.35) -- (-0.8,-0.95) (0,-0.35) -- (0.8,-0.95);
+      \node[font=\scriptsize] at (-0.55,0) {A}; \node[font=\scriptsize] at (0.55,0) {B};
+      \node[font=\scriptsize] at (0,0.85) {C}; \node[font=\scriptsize] at (0,-0.85) {D};
+      \draw[->,thick] (1.0,0) -- (1.5,0);
+      \begin{scope}[xshift=2.85cm]
+        \draw[very thick] (-0.35,0) -- (0.35,0) (-0.35,0) -- (-0.95,0.8) (-0.35,0) -- (-0.95,-0.8)
+          (0.35,0) -- (0.95,0.8) (0.35,0) -- (0.95,-0.8);
+        \node[font=\scriptsize] at (-0.85,0) {A}; \node[font=\scriptsize] at (0.85,0) {B};
+        \node[font=\scriptsize] at (0,0.55) {C}; \node[font=\scriptsize] at (0,-0.55) {D};
+      \end{scope}
+      \node[font=\small] at (1.35,-1.95) {(c) transition T1};
+    \end{scope}
+    % (d) dislocation : pentagone accolé à un heptagone
+    \begin{scope}[xshift=11.2cm,scale=0.7]
+      \draw[thick,fill={rgb,255:red,240;green,150;blue,60}] ([shift={(-0.688,0)}]36:0.8507)
+        \foreach \a in {108,180,252,324} {-- ([shift={(-0.688,0)}]\a:0.8507)} -- cycle;
+      \draw[thick,fill={rgb,255:red,95;green,170;blue,225}] ([shift={(1.038,0)}]154.286:1.1524)
+        \foreach \a in {102.857,51.429,0,-51.429,-102.857,-154.286} {-- ([shift={(1.038,0)}]\a:1.1524)} -- cycle;
+      \node[font=\small] at (-0.688,0) {5}; \node[font=\small] at (1.038,0) {7};
+      \node[font=\small] at (0.2,-1.95) {(d) dislocation};
+    \end{scope}
+  \end{tikzpicture}
+  \caption{Ce que mesurent quelques indicateurs. (a) Aux sommets, trois parois forment trois angles, tous de
+    $120^\circ$ dans un pavage hexagonal régulier ; $\sigma_V$ est l'écart type de ces angles. (b) Les voisins de
+    Voronoï d'un germe (en gris) et les angles $\theta_{ij}$ des liaisons : $\psi_6$ vaut 1 si les six voisins
+    sont à $60^\circ$ les uns des autres ; chaque paroi (en rouge) est perpendiculaire à une liaison, et $S_6$
+    mesure si les parois de toute une région suivent les mêmes trois directions. (c) Une transition T1 : la paroi
+    entre A et B disparaît, C et D deviennent voisines ; c'est le seul changement de topologie possible lors d'un
+    déplacement continu des germes. (d) Le cœur d'une dislocation du réseau hexagonal : un pentagone accolé à un
+    heptagone.}
+  \label{fig:schemas}
+\end{figure}
 
 %======================================================================
 \section{Résultats}
@@ -322,7 +382,31 @@ cristal perturbé atteint $2.4^\circ$ en une centaine d'itérations puis reste s
 plus en plus réguliers, mais les angles éloignés de $120^\circ$ qui subsistent sont ceux des défauts :
 $\sigma_V$ suit $\sigma_n$ de très près ($r=0.98$).
 
-\textbf{Orientation à longue portée.} Les angles locaux ne disent rien de l'alignement d'une région à l'autre. Pour
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}{0.24\linewidth}\includegraphics[width=\linewidth]{figures/orient_uniform_s1_0010.png}\caption{\code{uniform}, $k=10$}\end{subfigure}\hfill
+  \begin{subfigure}{0.24\linewidth}\includegraphics[width=\linewidth]{figures/orient_uniform_s1_0100.png}\caption{\code{uniform}, $k=100$}\end{subfigure}\hfill
+  \begin{subfigure}{0.24\linewidth}\includegraphics[width=\linewidth]{figures/orient_uniform_s1_1000.png}\caption{\code{uniform}, $k=1000$}\end{subfigure}\hfill
+  \begin{subfigure}{0.24\linewidth}\includegraphics[width=\linewidth]{figures/orient_hex_s1_1000.png}\caption{\code{hex}, $k=1000$}\end{subfigure}\\[2mm]
+  \begin{tikzpicture}
+    \node[anchor=west,font=\scriptsize] at (0,0) {orientation locale du réseau :};
+    \node[anchor=west,inner sep=0] (pal) at (3.6,0) {\includegraphics[width=5cm,height=0.3cm]{figures/palette.png}};
+    \node[anchor=north,font=\scriptsize] at (pal.south west) {$0^\circ$};
+    \node[anchor=north,font=\scriptsize] at (pal.south) {$30^\circ$};
+    \node[anchor=north,font=\scriptsize] at (pal.south east) {$60^\circ$};
+    \fill[black!83] (9.2,-0.15) rectangle (9.5,0.15); \node[anchor=west,font=\scriptsize] at (9.55,0) {défaut ($n\ne6$)};
+  \end{tikzpicture}
+  \caption{Cartes d'orientation ($40\times40$, graine 1). Chaque hexagone est coloré selon l'orientation de son
+    voisinage, $\arg(\psi_6)/6$, définie à $60^\circ$ près (teinte cyclique : $0^\circ$ et $60^\circ$ ont la même
+    couleur) ; les cellules non hexagonales sont en gris foncé. Les plages de même couleur sont des domaines
+    d'orientation ; les défauts s'alignent sur les joints qui les séparent. Le cadre de cellules grises est le bord
+    (cellules coupées par le carré). Avec le tirage uniforme, les domaines grossissent lentement ; le cristal
+    perturbé forme un seul domaine.}
+  \label{fig:orient}
+\end{figure}
+
+\textbf{Orientation à longue portée.} Les angles locaux ne disent rien de l'alignement d'une région à l'autre
+(figure~\ref{fig:orient}). Pour
 les tirages aléatoires, $S_6$ reste faible : il croît lentement de 0.01--0.02 à 0.14--0.15 à $k=1000$, avec une
 forte dispersion entre graines ($\pm0.05$ à $\pm0.08$). Le tissu est formé de domaines hexagonaux d'orientations
 différentes, séparés par des joints ; leur lent grossissement fait croître $S_6$, et la dispersion entre graines
@@ -461,6 +545,29 @@ qu'on attend de domaines d'orientations indépendantes de taille fixe (section~\
 
 \begin{figure}[H]
   \centering
+  \newcommand{\grille}[2]{% #1 côté des fenêtres, #2 nombre de fenêtres par côté
+    \begin{tikzpicture}[x=0.16cm,y=0.16cm]
+      \node[anchor=south west,inner sep=0] at (0,0) {\includegraphics[width=6.4cm]{figures/orient_uniform_s1_0100.png}};
+      \foreach \i in {0,...,#2} {
+        \draw[white,line width=2.2pt] (2.5+#1*\i,2.5) -- (2.5+#1*\i,2.5+#1*#2);
+        \draw[white,line width=2.2pt] (2.5,2.5+#1*\i) -- (2.5+#1*#2,2.5+#1*\i);
+        \draw[black,line width=0.9pt] (2.5+#1*\i,2.5) -- (2.5+#1*\i,2.5+#1*#2);
+        \draw[black,line width=0.9pt] (2.5,2.5+#1*\i) -- (2.5+#1*#2,2.5+#1*\i);}
+      \draw[cR,line width=2pt] (2.5+#1,2.5+#1) rectangle (2.5+2*#1,2.5+2*#1);
+    \end{tikzpicture}}
+  \begin{subfigure}{0.45\linewidth}\centering\grille{8}{4}\caption{$w=8$ (environ 80 cellules par fenêtre)}\end{subfigure}\hfill
+  \begin{subfigure}{0.45\linewidth}\centering\grille{16}{2}\caption{$w=16$ (environ 330 cellules par fenêtre)}\end{subfigure}
+  \caption{Analyse par fenêtres, illustrée sur un tissu $40\times40$ ($k=100$, carte d'orientation de la
+    figure~\ref{fig:orient}) : le tissu est découpé en fenêtres carrées jointives de côté $w$, à 2.5 diamètres du
+    bord ; chaque indicateur est calculé dans chaque fenêtre (par exemple celle encadrée en rouge), puis on mesure
+    sa dispersion d'une fenêtre à l'autre. Une petite fenêtre peut tomber dans un seul domaine d'orientation ou sur
+    un amas de défauts ; une grande fenêtre moyenne de nombreux domaines. Dans l'étude, les fenêtres sont prises
+    dans des tissus de $160\times160$ et $320\times320$.}
+  \label{fig:grille}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
   \newcommand{\fen}[3]{% #1 colonne, #2 libellé, #3 options
     \begin{axis}[width=0.48\linewidth,height=4.8cm,xmode=log,ymode=log,xlabel={cellules par fenêtre},
         ylabel={#2},grid=major,grid style={gray!20},legend style={font=\scriptsize},thick,mark size=1pt,#3]
@@ -543,6 +650,46 @@ grossissent donc lentement, d'un facteur 2 à 3 par décade d'itérations, mais 
 cellules de côté.
 
 \subsection{Conséquences pour une éprouvette de fissuration pré-entaillée}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[x=0.075cm,y=0.075cm,>=Stealth]
+    % mors
+    \fill[gray!35] (0,90) rectangle (90,97); \fill[gray!35] (0,-7) rectangle (90,0);
+    \foreach \x in {0,6,...,84} {\draw[gray!70] (\x,97) -- (\x+6,90); \draw[gray!70] (\x,0) -- (\x+6,-7);}
+    \draw[->,very thick] (45,98) -- (45,108) node[above] {$F$};
+    \draw[->,very thick] (45,-8) -- (45,-16) node[right] {$F$};
+    % éprouvette
+    \draw[thick,fill=green!6] (0,0) rectangle (90,90);
+    % zones perturbées le long des mors (2 couronnes)
+    \fill[cR!15] (0,0) rectangle (90,3); \fill[cR!15] (0,87) rectangle (90,90);
+    % bande traversée par la fissure dans le ligament
+    \fill[cU!25] (45,43.5) rectangle (90,46.5);
+    % entaille
+    \fill[white] (0,44.4) rectangle (45,45.6); \draw[thick] (0,44.4) -- (45,44.4) (0,45.6) -- (45,45.6);
+    \draw[thick] (45,44.4) -- (45,45.6);
+    % zone d'élaboration en pointe d'entaille
+    \draw[cR,thick] (45,45) circle (4);
+    \draw[cR] (42,48) -- (-6,66) node[left,font=\scriptsize,align=right] {pointe d'entaille :\\quelques cellules\\(aléatoire)};
+    % domaine d'orientation (taille l6)
+    \draw[cH,thick,fill=cH!20] (70,70) rectangle (72.6,72.6);
+    \draw[cH] (72.6,72.6) -- (100,80) node[right,font=\scriptsize,align=left] {domaine d'orientation\\$\ell_6\approx2.6$ ($k=100$),\\à l'échelle};
+    % cotes
+    \draw[|<->|] (0,-24) -- (90,-24) node[midway,below,font=\scriptsize] {largeur $W\approx80$ à 100 diamètres de cellule};
+    \path (-50,0) (150,0); % marges pour les étiquettes latérales
+    \draw[|<->|] (0,36) -- (45,36) node[midway,below,font=\scriptsize] {entaille $a\approx W/2$};
+    \draw[|<->|] (45,54) -- (90,54) node[midway,above,font=\scriptsize] {ligament $\gtrsim10\,\ell_6$};
+    \draw[|<->|] (96,0) -- (96,90) node[pos=0.35,right,font=\scriptsize,align=left] {hauteur\\$H\approx W$};
+    \draw[cU] (82,46.5) -- (100,62) node[right,font=\scriptsize,align=left] {bande traversée\\par la fissure\\($\approx3.8\,l$ cellules)};
+    \draw[cR] (60,2) -- (100,14) node[right,font=\scriptsize,align=left] {2 couronnes\\perturbées par\\les bords};
+  \end{tikzpicture}
+  \caption{Éprouvette pré-entaillée tirée en traction : ordres de grandeur déduits des mesures de microstructure
+    ($k\approx100$, longueurs en diamètres de cellule, à l'échelle sauf l'épaisseur de l'entaille). La pointe
+    d'entaille ne voit que quelques cellules, dont la configuration est aléatoire quelle que soit la taille ; la
+    fissure traverse ensuite une bande du ligament ; les domaines d'orientation sont petits devant le ligament.
+    Avec $W=H=80$ à 100, l'éprouvette compte 8000 à 13\,000 cellules.}
+  \label{fig:eprouvette}
+\end{figure}
 
 Une simulation de fissuration d'une éprouvette pré-entaillée tirée en traction sollicite surtout les cellules
 situées en pointe d'entaille, puis celles que traverse la fissure dans le ligament. Les mesures précédentes

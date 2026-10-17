@@ -2,6 +2,9 @@
 //
 // Usage : mesure cells1.txt [cells2.txt ...]     indicateurs, une ligne par fichier (en-tête en première ligne)
 //         mesure -hist cells.txt                  histogrammes des angles aux sommets et des orientations de paroi
+//         mesure -cells cells.txt                 une ligne par cellule du tissu : id (rang dans le fichier de
+//                                                 cellules), n côtés, |psi6|, orientation locale arg(psi6)/6 en
+//                                                 degrés dans [0, 60[, cellule profonde (0/1)
 //         mesure -windows w cells.txt             indicateurs par fenêtre carrée de côté w (une ligne par fenêtre) :
 //                                                 fenêtres jointives, à 2.5 diamètres du bord du domaine ; cellules
 //                                                 profondes comptées par leur centroïde, parois par leur milieu
@@ -191,6 +194,31 @@ int histograms(const char *file) {
   return 0;
 }
 
+// Valeurs par cellule (cartes d'orientation du rapport)
+int perCell(const char *file) {
+  Tissue t = loadCells(file);
+  Analysis an(t);
+  std::printf("id n psi6 orientation profonde\n");
+  int id = 0;
+  for (size_t c = 0; c < an.m.cells.size(); c++) {
+    if (an.m.cells[c].empty()) {
+      continue;
+    }
+    std::complex<double> z(0.0, 0.0);
+    for (int j : an.neigh[c]) {
+      V d = t.seeds[j] - t.seeds[c];
+      z += std::polar(1.0, 6.0 * std::atan2(d.y, d.x));
+    }
+    double nn = (double)std::max<size_t>(1, an.neigh[c].size());
+    double phase = std::arg(z) * 180.0 / M_PI / 6.0; // dans ]-30, 30]
+    if (phase < 0.0) {
+      phase += 60.0;
+    }
+    std::printf("%d %zu %.4f %.3f %d\n", id++, an.m.cells[c].size(), std::abs(z) / nn, phase, (int)an.deep[c]);
+  }
+  return 0;
+}
+
 // Indicateurs par fenêtre : nombre de cellules, cvA, sigmaN, p6, aire moyenne, S6 des parois de la fenêtre
 int windows(double w, const char *file) {
   Tissue t = loadCells(file);
@@ -254,12 +282,15 @@ int windows(double w, const char *file) {
 int main(int argc, char *argv[]) {
   if (argc < 2) {
     std::fprintf(stderr, "Usage : mesure cells1.txt [cells2.txt ...]\n        mesure -hist cells.txt\n"
-                         "        mesure -windows w cells.txt\n");
+                         "        mesure -cells cells.txt\n        mesure -windows w cells.txt\n");
     return 1;
   }
   try {
     if (!std::strcmp(argv[1], "-hist") && argc == 3) {
       return histograms(argv[2]);
+    }
+    if (!std::strcmp(argv[1], "-cells") && argc == 3) {
+      return perCell(argv[2]);
     }
     if (!std::strcmp(argv[1], "-windows") && argc == 4) {
       return windows(std::atof(argv[2]), argv[3]);

@@ -122,8 +122,41 @@ for k in 0 3 20 200; do
   fi
   prev=$out
   side_svg work/vue_poly_$k.txt > work/vue_$k.svg
-  inkscape work/vue_$k.svg --export-type=png --export-filename=figures/vue_$k.png -w 640 > /dev/null 2>&1
+  inkscape work/vue_$k.svg --export-type=png --export-filename=figures/vue_$k.png -w 1280 > /dev/null 2>&1
 done
+
+# --- 3 bis. Cartes d'orientation : hexagones colorés selon l'orientation locale du réseau (arg psi6 / 6, teinte
+#            cyclique sur 60°), défauts (n != 6) en gris foncé ; tissus 40 x 40 de la graine 1
+orient_svg() { # fichier de valeurs par cellule (mesure -cells), fichier de polygones, côté L
+  awk -v s=20 -v L=$3 '
+    function hex(v) { return sprintf("%02x", int(255 * v + 0.5)) }
+    function hsv(h, sa, va,   i, f, p, q, t, r, g, b) {
+      h = (h % 360) / 60; i = int(h); f = h - i; p = va * (1 - sa); q = va * (1 - sa * f); t = va * (1 - sa * (1 - f))
+      if (i == 0) { r = va; g = t; b = p } else if (i == 1) { r = q; g = va; b = p } else if (i == 2) { r = p; g = va; b = t }
+      else if (i == 3) { r = p; g = q; b = va } else if (i == 4) { r = t; g = p; b = va } else { r = va; g = p; b = q }
+      return "#" hex(r) hex(g) hex(b) }
+    FNR == NR { if (FNR > 1) { n[$1] = $2; ph[$1] = $4 }; next }
+    FNR == 1 { printf "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"%d\" height=\"%d\">\n", L * s, L * s }
+    $1 ~ /^[0-9]+$/ && NF > 3 { id = $1; col = (n[id] == 6 ? hsv(6 * ph[id], 0.7, 0.95) : "#2b2b2b")
+      printf "<polygon fill=\"%s\" stroke=\"#ffffff\" stroke-width=\"0.6\" points=\"", col
+      for (k = 0; k < $3; k++) printf "%.1f,%.1f ", $(4 + 2 * k) * s, (L - $(5 + 2 * k)) * s
+      print "\"/>" }
+    END { printf "<rect width=\"%d\" height=\"%d\" fill=\"none\" stroke=\"#000\" stroke-width=\"3\"/>\n</svg>\n", L * s, L * s }' "$1" "$2"
+}
+for f in uniform_s1_0010 uniform_s1_0100 uniform_s1_1000 hex_s1_1000; do
+  $C -load work/$f.txt output=/dev/null svg=none polygons=work/poly_$f.txt > /dev/null
+  ./mesure -cells work/$f.txt > work/cells_$f.txt
+  orient_svg work/cells_$f.txt work/poly_$f.txt $L > work/orient_$f.svg
+  inkscape work/orient_$f.svg --export-type=png --export-filename=figures/orient_$f.png -w 1600 > /dev/null 2>&1
+done
+# palette de la teinte (légende) : bande de 0 à 60°
+awk 'BEGIN { print "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"360\" height=\"20\">"
+  for (h = 0; h < 360; h++) { i = int(h / 60); f = h / 60 - i; p = 0.95 * 0.3; q = 0.95 * (1 - 0.7 * f); t = 0.95 * (1 - 0.7 * (1 - f)); v = 0.95
+    if (i == 0) { r = v; g = t; b = p } else if (i == 1) { r = q; g = v; b = p } else if (i == 2) { r = p; g = v; b = t }
+    else if (i == 3) { r = p; g = q; b = v } else if (i == 4) { r = t; g = p; b = v } else { r = v; g = p; b = q }
+    printf "<rect x=\"%d\" width=\"1.2\" height=\"20\" fill=\"rgb(%d,%d,%d)\"/>\n", h, 255 * r, 255 * g, 255 * b }
+  print "</svg>" }' > work/palette.svg
+inkscape work/palette.svg --export-type=png --export-filename=figures/palette.png -w 360 > /dev/null 2>&1
 
 # --- 4. Rapport (la section « taille représentative » utilise les données de run_taille.sh)
 [ -f data/taille_tableau.tex ] || ./run_taille.sh
