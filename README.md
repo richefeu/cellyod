@@ -53,6 +53,16 @@ formes : `min(f1, f2)` ; intersection : `max(f1, f2)` ; différence : `max(f1, -
 | anneau | `max(r - 18, 8 - r)` |
 | disque échancré (`examples/rein.txt`) | `r - 20 + 4.5*exp(-t^2/0.12)` |
 
+## Documentation
+
+Un tutoriel détaillé (utilisation, méthode, fichiers, interface, organisation du code) est dans
+`doc/tutorial_cellyod.tex`. Seules les sources sont versionnées ; pour produire le PDF (inkscape, ImageMagick et
+LuaLaTeX nécessaires) :
+
+```bash
+cd doc && ./make_figures.sh && latexmk -lualatex tutorial_cellyod.tex   # -> doc/tutorial_cellyod.pdf
+```
+
 ## Interface graphique
 
 ```bash
@@ -141,6 +151,7 @@ valeur du fichier.
 | `bundleMotion` | lloyd | `lloyd`, `fixed` ou `attract` |
 | `output` | cells.txt | fichier de cellules produit |
 | `svg` | cells.svg | vue SVG (`none` : pas de SVG) |
+| `svgSeeds`, `svgLegend` | 1, 1 | SVG : afficher les germes, la légende des bundles |
 | `morphology` | — | ajoute une ligne de paramètres et de métriques au fichier (balayages) |
 
 Σ = K a aᵀ + b bᵀ, avec a la direction des colonnes et b sa perpendiculaire. Toute matrice définie positive

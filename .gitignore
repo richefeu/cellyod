@@ -16,3 +16,14 @@ examples/morphology.txt
 cellyod-gui.ini
 
 .DS_Store
+
+# Tutoriel : fichiers intermédiaires
+doc/work/
+doc/*.aux
+doc/*.log
+doc/*.out
+doc/*.toc
+doc/*.fls
+doc/*.fdb_latexmk
+doc/figures/
+doc/*.pdf

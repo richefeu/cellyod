@@ -54,7 +54,10 @@ int main(int argc, char *argv[]) {
     Metrics mt = computeMetrics(t, m);
     saveCells(P.output, t, m);
     if (!P.svg.empty() && P.svg != "none") {
-      writeSVG(P.svg, t, m);
+      SvgOptions so;
+      so.seeds = P.svgSeeds;
+      so.legend = P.svgLegend;
+      writeSVG(P.svg, t, m, so);
     }
     if (!P.morphology.empty()) {
       appendMorphology(P.morphology, t, mt);

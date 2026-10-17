@@ -1,0 +1,704 @@
+% Tutoriel cellyod — compiler avec : latexmk -lualatex tutorial_cellyod.tex
+% (figures et données : ./make_figures.sh)
+\documentclass[10pt,a4paper]{article}
+
+\usepackage{fontspec}
+\usepackage[french]{babel}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs,tabularx}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{float}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,calc,positioning,decorations.pathreplacing}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage[margin=2.1cm]{geometry}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{enumitem}
+\usepackage{multicol}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
+
+\setlist{itemsep=1pt,topsep=3pt}
+\emergencystretch=3em
+\definecolor{cell}{HTML}{0F111A}
+\definecolor{bundle}{HTML}{F07470}
+\definecolor{accent}{HTML}{2D7DD2}
+\definecolor{seed}{HTML}{8E8F9C}
+
+\lstset{basicstyle=\ttfamily\footnotesize,columns=fullflexible,frame=single,framerule=0.3pt,
+  backgroundcolor=\color{gray!6},breaklines=true,keepspaces=true,upquote=true}
+
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\cy}{\code{cellyod}}
+\newcommand{\cyg}{\code{cellyod-gui}}
+\newcommand{\vect}[1]{\boldsymbol{#1}}
+
+\title{\cy{}\\[3pt]
+  \large Génération de tissus cellulaires par Voronoï et itérations de Lloyd :\\
+  tutoriel, méthode et organisation du code}
+\author{Dépôt \code{cellYOd}}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+  \cy{} pave un domaine plan par un diagramme de Voronoï que des itérations de Lloyd régularisent. Une fraction
+  des cellules sont des \emph{bundles} (faisceaux vasculaires) qui attirent les autres au sens d'une distance de
+  Mahalanobis : selon deux paramètres de forme, l'intensité $\alpha$ de l'attraction et l'anisotropie $K$ de la
+  métrique, le tissu passe continûment du pavage hexagonal régulier à des tissus très hétérogènes, organisés en
+  amas ou en colonnes. Le domaine peut avoir une forme quelconque, définie par une fonction $f(x,y)$. Le
+  programme comprend un cœur C++17 sans dépendance, une ligne de commande (\cy) et une interface graphique
+  (\cyg, raylib) où tous les paramètres se règlent à la souris pendant que le tissu évolue. Ce document montre
+  comment s'en servir (section~\ref{sec:prise}), décrit la méthode en détail (section~\ref{sec:methode}),
+  les fichiers (section~\ref{sec:fichiers}), l'interface (section~\ref{sec:gui}), des études types
+  (section~\ref{sec:etudes}) et l'organisation du code (section~\ref{sec:code}).
+\end{abstract}
+
+\tableofcontents
+
+%======================================================================
+\section{Prise en main}\label{sec:prise}
+%======================================================================
+
+\subsection{Compilation}
+
+\begin{lstlisting}
+make                 # cellyod (ligne de commande) et cellyod-gui (interface)
+make cellyod         # ligne de commande seule : aucune dépendance, simple compilateur C++17
+\end{lstlisting}
+L'interface demande raylib (\code{brew install raylib}) ; raygui, rini et la police d'interface sont fournis
+dans \code{gui/}. Le cœur et la ligne de commande n'utilisent que la bibliothèque standard.
+
+\subsection{Trois façons de l'utiliser}
+
+\paragraph{Explorer avec l'interface.} C'est le point de départ conseillé : on voit le tissu se former
+itération par itération et on observe immédiatement l'effet de chaque paramètre.
+\begin{lstlisting}
+./cellyod-gui                        # paramètres par défaut (réseau hexagonal perturbé, Lloyd seul)
+./cellyod-gui examples/tissu.txt     # fichier de paramètres... ou fichier de cellules déjà calculé
+\end{lstlisting}
+Dans le panneau de droite, mettre par exemple \code{bundleFraction} à 0.05 (les germes sont régénérés),
+puis faire varier \code{alpha} et \code{anisotropy} pendant que les itérations tournent (bouton \emph{Lancer}
+ou barre d'espace). Le bouton \emph{Enregistrer} écrit le fichier de cellules et sa vue SVG ;
+\emph{Paramètres} écrit un fichier de paramètres relisible par la ligne de commande.
+
+\paragraph{Produire un tissu en ligne de commande.} Un fichier de paramètres « mot-clé valeur » décrit le
+tissu ; \code{mot-clé=valeur} sur la ligne de commande remplace une valeur du fichier :
+\begin{lstlisting}
+cd examples
+../cellyod tissu.txt                                  # -> tissu_cells.txt et tissu.svg
+../cellyod tissu.txt alpha=0.1 "anisotropy=1000 90"  # variante, sans modifier le fichier
+../cellyod tissu.txt svg=none output=a.txt            # sans SVG
+../cellyod alpha=0.05 bundleFraction=0.05 Lx=60 Ly=30 # sans fichier : défauts + remplacements
+\end{lstlisting}
+La sortie résume le tissu obtenu :
+\lstinputlisting{figures/sortie_tissu.txt}
+
+\paragraph{Reprendre un calcul.} Un fichier de cellules contient les paramètres et les germes : il suffit pour
+poursuivre les itérations, en changeant éventuellement les paramètres « vivants » (section~\ref{sec:effets}) :
+\begin{lstlisting}
+../cellyod -load tissu_cells.txt lloydIterations=200 output=tissu200.txt
+../cellyod -load tissu_cells.txt lloydIterations=80 alpha=0.1   # 30 itérations de plus avec alpha = 0.1
+\end{lstlisting}
+Une reprise donne exactement les mêmes germes qu'un calcul d'une traite (section~\ref{sec:reprise}).
+
+\subsection{Exemples fournis}
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}lXl@{}}
+  \toprule
+  Fichier & Tissu & Réglage principal \\
+  \midrule
+  \code{examples/tissu.txt} & référence de l'article : amas autour des bundles &
+    \code{random}, 5\,\% bundles, $\alpha=0.05$, $K=1$ \\
+  \code{examples/colonnes.txt} & organisation en colonnes & idem, $K=1000$ \\
+  \code{examples/tomographie.txt} & coupe tomographique & \code{square}, \code{disorder 0}, 5 it., $\alpha=0.02$,
+    $K=10^4$ \\
+  \code{examples/rein.txt} & domaine non convexe (disque échancré) & \code{shape}, référence \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+\subsection{Unités}
+
+Toutes les grandeurs sont \textbf{sans dimension}. L'unité de longueur est le diamètre équivalent visé des
+cellules : une cellule a une aire visée $A_0=\pi/4$, et l'espacement visé entre germes vaut
+$s=\sqrt{A_0}=\sqrt{\pi}/2\approx 0.886$. Un rectangle $L_x\times L_y$ contient donc environ
+$L_xL_y/A_0$ germes (2037 pour $40\times40$). Pour une application dimensionnée, il suffit de multiplier toutes les
+coordonnées par le diamètre de cellule voulu.
+
+%======================================================================
+\section{Paramètres}\label{sec:params}
+%======================================================================
+
+Un fichier de paramètres contient une ligne par mot-clé : \code{mot-clé valeur(s)}, \code{\#} commençant un
+commentaire. Les mots-clés absents gardent leur valeur par défaut ; un mot-clé inconnu ou une valeur invalide
+sont refusés avec un message qui donne le fichier et la ligne. La liste complète est donnée par
+\code{cellyod -h} :
+\lstinputlisting{figures/aide.txt}
+
+\subsection{Effet d'une modification}\label{sec:effets}
+
+Chaque paramètre est déclaré soit \emph{de régénération} (marqué \code{*} dans l'interface), soit
+\emph{vivant} :
+\begin{itemize}
+  \item \textbf{régénération} : \code{Lx}, \code{Ly}, \code{shape}, \code{lattice}, \code{disorder},
+    \code{seed}, \code{bundleFraction}. Ils définissent l'état initial (germes et choix des bundles) ; les
+    modifier recommence le calcul à l'itération 0 ;
+  \item \textbf{vivants} : \code{beta}, \code{lloydIterations}, \code{alpha}, \code{anisotropy},
+    \code{anisotropyAngle}, \code{bundleMotion}. Ils n'interviennent que dans la règle d'itération : une
+    modification s'applique à l'itération suivante, sans repartir de zéro. On peut donc enchaîner plusieurs
+    régimes (par exemple quelques itérations de Lloyd pur, puis l'attraction), dans l'interface ou avec
+    \code{-load}.
+\end{itemize}
+
+%======================================================================
+\section{Méthode}\label{sec:methode}
+%======================================================================
+
+Le calcul enchaîne : (1) placement des germes initiaux dans le rectangle $[0,L_x]\times[0,L_y]$ ; (2) choix des
+bundles ; (3) itérations, chacune consistant à calculer le pavage de Voronoï des germes, à le restreindre à la
+forme du domaine, puis à déplacer chaque germe ; (4) construction du pavage à sommets partagés et calcul des
+métriques. Seul le pavage de Voronoï exact des germes est produit : il n'y a aucune retouche de la topologie
+(fusion d'arêtes courtes, transitions T1\dots) comme dans \code{nodeGen}.
+
+\subsection{Germes initiaux}\label{sec:germes}
+
+Quatre états initiaux (\code{lattice}), tous à la densité visée (figure~\ref{fig:lattices}) :
+\begin{itemize}
+  \item \code{hex} : réseau hexagonal de pas $a=\sqrt{2A_0/\sqrt3}$, rangées espacées de $a\sqrt3/2$ et
+    décalées d'un demi-pas une sur deux. Chaque germe est déplacé d'un vecteur de module
+    $r=\text{\code{disorder}}\cdot a\sqrt{u_1}$ et d'angle $2\pi u_2$ ($u_1,u_2$ uniformes sur $[0,1]$), soit un
+    déplacement uniforme dans le disque de rayon $\text{\code{disorder}}\cdot a$. Avec \code{disorder 0}, le pavage
+    est un pavage hexagonal parfait ;
+  \item \code{square} : même construction sur une grille carrée de pas $\sqrt{A_0}$ ; avec \code{disorder 0}, la
+    grille carrée exacte utilisée dans l'article pour la comparaison aux coupes tomographiques ;
+  \item \code{random} (alias \code{poisson}) : $N=\mathrm{round}(L_xL_y/A_0)$ points tirés uniformément avec une
+    distance minimale $0.7\,s$ (tirage avec rejet, au plus $200N$ essais, puis complément sans contrainte) ;
+  \item \code{uniform} : $N$ points tirés uniformément, sans distance minimale (processus de Poisson). Des germes
+    très proches donnent des cellules minuscules : c'est l'état le plus désordonné.
+\end{itemize}
+Le générateur est un \code{mt19937\_64} initialisé par \code{seed} : à paramètres égaux, le résultat est
+identique d'une exécution à l'autre ; pour les mêmes réglages, il donne les mêmes cellules et les mêmes
+métriques que \code{nodeGenPlantCom}.
+
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}{0.24\linewidth}\includegraphics[width=\linewidth]{figures/lattice_hex.png}\caption{\code{hex}}\end{subfigure}\hfill
+  \begin{subfigure}{0.24\linewidth}\includegraphics[width=\linewidth]{figures/lattice_square.png}\caption{\code{square}}\end{subfigure}\hfill
+  \begin{subfigure}{0.24\linewidth}\includegraphics[width=\linewidth]{figures/lattice_random.png}\caption{\code{random}}\end{subfigure}\hfill
+  \begin{subfigure}{0.24\linewidth}\includegraphics[width=\linewidth]{figures/lattice_uniform.png}\caption{\code{uniform}}\end{subfigure}
+  \caption{Pavages de Voronoï des germes initiaux ($14\times14$, \code{disorder 0.3}, 0 itération).}
+  \label{fig:lattices}
+\end{figure}
+
+\subsection{Bundles}
+
+Une fraction \code{bundleFraction} des germes (parmi ceux dont la cellule est dans la forme) est tirée au hasard
+comme bundles, avec le même générateur, après le placement des germes. S'y ajoute, pour chaque ligne
+\code{bundle x y}, le germe le plus proche du point $(x,y)$. Dans l'interface, un clic sur une cellule en fait un
+bundle (ou l'inverse) ; les bundles ajoutés à la souris sont mémorisés comme lignes \code{bundle x y}, de sorte
+qu'ils survivent à une régénération et sont enregistrés avec les paramètres.
+
+\subsection{Pavage de Voronoï}\label{sec:voronoi}
+
+La cellule du germe $\vect p_i$ est l'ensemble des points plus proches de $\vect p_i$ que de tout autre germe :
+c'est l'intersection des demi-plans $\{\vect x : (\vect x-\vect m_{ij})\cdot(\vect p_j-\vect p_i)\le 0\}$,
+$\vect m_{ij}=(\vect p_i+\vect p_j)/2$. \cy{} la construit directement sous cette forme :
+\begin{enumerate}
+  \item les germes sont rangés dans une grille de cases de côté $s$ ;
+  \item la cellule part du rectangle $[0,L_x]\times[0,L_y]$ et est découpée (algorithme de Sutherland--Hodgman
+    pour un demi-plan) par les germes des couronnes de cases $k=0,1,2,\dots$ autour de $\vect p_i$ ;
+  \item on s'arrête dès que $k\,s\ge 2R$, $R$ étant la distance de $\vect p_i$ au sommet le plus éloigné de la
+    cellule courante : un germe plus lointain que $2R$ a sa médiatrice hors de la cellule et ne peut plus la
+    couper.
+\end{enumerate}
+Le coût est proportionnel au nombre de germes (une vingtaine de voisins examinés par cellule), soit environ
+4~ms par itération pour 2000 cellules. Les cellules obtenues sont convexes et orientées dans le sens
+trigonométrique. Dans chaque case, les germes sont traités dans l'ordre de leurs coordonnées : le résultat,
+arrondis compris, ne dépend pas de leur numérotation, ce qui garantit l'exactitude des reprises.
+
+\subsection{Itérations de Lloyd}\label{sec:lloyd}
+
+L'algorithme de Lloyd minimise l'énergie de la tessellation centroïdale de Voronoï
+\begin{equation}
+  E_{\mathrm{CVL}}(P)=\sum_i\int_{V_i}\|\vect x-\vect p_i\|^2\,d\vect x ,
+\end{equation}
+qui mesure la compacité des cellules : son minimum est atteint quand chaque germe est le centroïde
+$\vect c_i$ de sa cellule $V_i$ (pour des cellules de même aire, les hexagones réguliers). Chaque itération
+déplace simultanément tous les germes en $\vect p_i'=\vect c_i$ ; l'énergie décroît à chaque pas. Partant d'un
+tirage uniforme, quelques itérations suffisent à rendre le pavage régulier (figure~\ref{fig:lloyd}) ; le
+déplacement moyen \code{lastMove} tend alors vers 0.
+
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}{0.3\linewidth}\includegraphics[width=\linewidth]{figures/lloyd_0.png}\caption{0 itération}\end{subfigure}\hfill
+  \begin{subfigure}{0.3\linewidth}\includegraphics[width=\linewidth]{figures/lloyd_5.png}\caption{5 itérations}\end{subfigure}\hfill
+  \begin{subfigure}{0.3\linewidth}\includegraphics[width=\linewidth]{figures/lloyd_50.png}\caption{50 itérations}\end{subfigure}
+  \caption{Régularisation de Lloyd seule ($\alpha=0$) à partir d'un tirage \code{uniform}.}
+  \label{fig:lloyd}
+\end{figure}
+
+\subsection{Attraction vers les bundles}\label{sec:attraction}
+
+Le modèle de Trivino \textit{et al.} (morphogenèse de Voronoï variationnelle) voit un tissu végétal comme deux
+populations : les cellules ordinaires, qui remplissent l'espace, et les bundles, qui apportent eau et
+nutriments. Le tissu minimise
+\begin{equation}
+  E(P,B)=E_{\mathrm{CVL}}(P)-\alpha\,E_{\mathrm{att}}(P,B),\qquad
+  E_{\mathrm{att}}=\sum_i\|\vect p_i-\vect b_{j(i)}\|^2_M ,
+\end{equation}
+où $\vect b_{j(i)}$ est le bundle le plus proche de la cellule $i$ au sens de la distance de Mahalanobis
+\begin{equation}
+  d_M(\vect u,\vect v)=\sqrt{(\vect u-\vect v)^{\mathsf T}\Sigma^{-1}(\vect u-\vect v)} .
+\end{equation}
+\textbf{Règle d'itération.} Pour chaque germe ordinaire : (1) centroïde $\vect c_i$ de sa cellule ; (2) bundle
+$\vect b$ le plus proche de $\vect c_i$ au sens de $d_M$ ; (3) nouveau germe
+\begin{equation}\label{eq:update}
+  \vect p_i'=\frac{\vect c_i+\alpha\,\vect b}{1+\alpha} ,
+\end{equation}
+c'est-à-dire $\vect c_i$ déplacé vers $\vect b$ d'une fraction $\alpha/(1+\alpha)$ du segment
+$[\vect c_i,\vect b]$. C'est l'itération de point fixe de la fonctionnelle ; avec $\alpha=0$ on retrouve
+exactement Lloyd. Tous les germes sont mis à jour simultanément, avec les positions des bundles du début de
+l'itération. Les bundles eux-mêmes suivent \code{bundleMotion} : \code{lloyd} (défaut : vers le centroïde de leur
+cellule, $B$ est optimisé avec $P$), \code{fixed} (immobiles) ou \code{attract} (attirés comme les autres
+cellules, vers le bundle le plus proche autre qu'eux-mêmes).
+
+\textbf{Métrique.} $\Sigma=K\,\vect a\vect a^{\mathsf T}+\vect b\vect b^{\mathsf T}$, avec $\vect a$ le vecteur
+unitaire d'angle \code{anisotropyAngle} (direction des colonnes) et $\vect b$ son orthogonal ; avec l'angle par
+défaut de $90^\circ$, $\Sigma=\mathrm{diag}(1,K)$ et $d_M^2=\Delta x^2+\Delta y^2/K$. Toute matrice définie positive
+s'écrit ainsi à un facteur près, et seule la forme de $\Sigma$ compte (un facteur multiplie toutes les distances
+sans changer le bundle le plus proche).
+
+\textbf{Les deux paramètres de forme} (figure~\ref{fig:shapespace}) :
+\begin{itemize}
+  \item $\alpha$ règle surtout l'\emph{hétérogénéité des aires} : les cellules proches d'un bundle rétrécissent.
+    Ordres de grandeur de l'article : $\alpha$ entre 0 et 0.2, référence 0.05 ;
+  \item $K$ règle l'\emph{organisation spatiale} : $K=1$ (distance euclidienne) donne des amas de petites
+    cellules autour de chaque bundle ; pour $K\gg1$, la distance est presque insensible aux écarts le long de
+    $\vect a$ : un bundle attire toute la bande de cellules de même abscisse (pour l'angle $90^\circ$) et le tissu
+    s'organise en bandes ($K=1000$ dans l'article, $10^4$ pour les coupes tomographiques).
+\end{itemize}
+
+\begin{figure}[H]
+  \centering
+  \setlength{\tabcolsep}{2pt}
+  \begin{tabular}{c ccc}
+    & $K=1$ & $K=100$ & $K=1000$\\
+    \raisebox{0.13\linewidth}{$\alpha=0$} &
+    \includegraphics[width=0.27\linewidth]{figures/shape_a0_K1.png} &
+    \includegraphics[width=0.27\linewidth]{figures/shape_a0_K100.png} &
+    \includegraphics[width=0.27\linewidth]{figures/shape_a0_K1000.png}\\
+    \raisebox{0.13\linewidth}{$\alpha=0.05$} &
+    \includegraphics[width=0.27\linewidth]{figures/shape_a0.05_K1.png} &
+    \includegraphics[width=0.27\linewidth]{figures/shape_a0.05_K100.png} &
+    \includegraphics[width=0.27\linewidth]{figures/shape_a0.05_K1000.png}\\
+    \raisebox{0.13\linewidth}{$\alpha=0.15$} &
+    \includegraphics[width=0.27\linewidth]{figures/shape_a0.15_K1.png} &
+    \includegraphics[width=0.27\linewidth]{figures/shape_a0.15_K100.png} &
+    \includegraphics[width=0.27\linewidth]{figures/shape_a0.15_K1000.png}
+  \end{tabular}
+  \caption{Espace des formes : $30\times30$, \code{random}, 5\,\% de bundles (points rouges), 50 itérations,
+    même graine. Avec $\alpha=0$, $K$ est sans effet.}
+  \label{fig:shapespace}
+\end{figure}
+
+\textbf{Pas de convergence.} À $\alpha$ et $K$ fixés, l'itération ne converge pas vers un état stationnaire :
+les cellules continuent de se resserrer autour des bundles. Le nombre d'itérations est donc un
+\emph{troisième paramètre de forme}, et deux tissus ne se comparent qu'à nombre d'itérations égal
+(figures~\ref{fig:iter} et \ref{fig:curves}). Pour $K=1$, $\sigma_A/\langle A\rangle$ croît sans saturer
+(0.30 après 5 itérations, 0.63 après 50, 0.75 après 200) tandis que le déplacement moyen décroît lentement ;
+pour $K=1000$, elle passe par un maximum (environ 1.0 vers 50--80 itérations) puis décroît, et les germes ne
+cessent pas de se déplacer (\code{lastMove} $\approx 0.3$ espacement par itération).
+
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}{0.24\linewidth}\includegraphics[width=\linewidth]{figures/iter_0.png}\caption{0}\end{subfigure}\hfill
+  \begin{subfigure}{0.24\linewidth}\includegraphics[width=\linewidth]{figures/iter_10.png}\caption{10}\end{subfigure}\hfill
+  \begin{subfigure}{0.24\linewidth}\includegraphics[width=\linewidth]{figures/iter_50.png}\caption{50}\end{subfigure}\hfill
+  \begin{subfigure}{0.24\linewidth}\includegraphics[width=\linewidth]{figures/iter_200.png}\caption{200 itérations}\end{subfigure}
+  \caption{Évolution du tissu de référence ($\alpha=0.05$, $K=1$) avec le nombre d'itérations.}
+  \label{fig:iter}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    \begin{axis}[width=0.48\linewidth,height=5cm,xlabel={itérations},ylabel={$\sigma_A/\langle A\rangle$},
+        legend pos=south east,legend style={font=\footnotesize},grid=major,grid style={gray!20}]
+      \addplot[accent,thick,mark=*,mark size=1.2pt] table[x=iteration,y=cvA]{figures/iter_K1.dat};
+      \addplot[bundle,thick,mark=square*,mark size=1.2pt] table[x=iteration,y=cvA]{figures/iter_K1000.dat};
+      \legend{$K=1$,$K=1000$}
+    \end{axis}
+  \end{tikzpicture}\hfill
+  \begin{tikzpicture}
+    \begin{axis}[width=0.48\linewidth,height=5cm,xlabel={$\alpha$ (50 itérations)},ylabel={$\sigma_A/\langle A\rangle$},
+        legend pos=south east,legend style={font=\footnotesize},grid=major,grid style={gray!20}]
+      \addplot[accent,thick,mark=*,mark size=1.2pt] table[x=alpha,y=cvA]{figures/alpha_K1.dat};
+      \addplot[bundle,thick,mark=square*,mark size=1.2pt] table[x=alpha,y=cvA]{figures/alpha_K1000.dat};
+      \legend{$K=1$,$K=1000$}
+    \end{axis}
+  \end{tikzpicture}\\[2mm]
+  \begin{tikzpicture}
+    \begin{axis}[width=0.48\linewidth,height=5cm,xlabel={itérations},ylabel={$\langle SI\rangle$},
+        legend pos=south east,legend style={font=\footnotesize},grid=major,grid style={gray!20}]
+      \addplot[accent,thick,mark=*,mark size=1.2pt] table[x=iteration,y=meanSI]{figures/iter_K1.dat};
+      \addplot[bundle,thick,mark=square*,mark size=1.2pt] table[x=iteration,y=meanSI]{figures/iter_K1000.dat};
+      \legend{$K=1$,$K=1000$}
+    \end{axis}
+  \end{tikzpicture}\hfill
+  \begin{tikzpicture}
+    \begin{axis}[width=0.48\linewidth,height=5cm,xlabel={itérations},ylabel={\code{lastMove}},ymode=log,
+        legend pos=south west,legend style={font=\footnotesize},grid=major,grid style={gray!20}]
+      \addplot[accent,thick,mark=*,mark size=1.2pt] table[x=iteration,y=lastMove]{figures/iter_K1.dat};
+      \addplot[bundle,thick,mark=square*,mark size=1.2pt] table[x=iteration,y=lastMove]{figures/iter_K1000.dat};
+      \legend{$K=1$,$K=1000$}
+    \end{axis}
+  \end{tikzpicture}
+  \caption{Métriques ($30\times30$, \code{random}, 5\,\% de bundles, $\alpha=0.05$ sauf en haut à droite) ;
+    données produites par le fichier \code{morphology} (section~\ref{sec:morpho}).}
+  \label{fig:curves}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}{0.3\linewidth}\includegraphics[width=\linewidth]{figures/angle30.png}\caption{$K=1000$, angle $30^\circ$}\end{subfigure}\hfill
+  \begin{subfigure}{0.3\linewidth}\includegraphics[width=\linewidth]{figures/motion_fixed.png}\caption{\code{bundleMotion fixed}}\end{subfigure}\hfill
+  \begin{subfigure}{0.3\linewidth}\includegraphics[width=\linewidth]{figures/tomo.png}\caption{coupe tomographique}\end{subfigure}
+  \caption{Variantes : orientation des colonnes, bundles immobiles ($\alpha=0.05$, $K=1$, 50 itérations),
+    réglage « coupe tomographique » (\code{square}, \code{disorder 0}, $\alpha=0.02$, $K=10^4$, 5 itérations).}
+\end{figure}
+
+\subsection{Forme du domaine}\label{sec:forme}
+
+\textbf{Principe.} Les germes remplissent toujours le rectangle ; le tissu est la partie
+$D=\{f(x,y)\le0\}$ de ce rectangle, $f$ étant donnée par l'expression \code{shape}. Le pavage de Voronoï est
+calculé dans le rectangle, puis chaque cellule $V_i$ est restreinte à $V_i\cap D$ :
+\begin{itemize}
+  \item une cellule \emph{intérieure} ($V_i\subset D$) est inchangée et suit la règle~\eqref{eq:update} ;
+  \item une cellule \emph{extérieure} ($V_i\cap D=\emptyset$) disparaît du tissu ; son germe est \emph{figé}. Les
+    germes figés forment la paroi qui contient le tissu : sans eux, les cellules du bord s'étaleraient
+    jusqu'au rectangle ;
+  \item une cellule \emph{coupée} va vers le centroïde $\vect c_i$ de sa partie intérieure, avec un poids
+    proportionnel à son aire extérieure $A^{\mathrm{out}}_i=|V_i|-|V_i\cap D|$ :
+    \begin{equation}\label{eq:beta}
+      \vect p_i'=\frac{\vect c_i+\alpha\,\vect b+w_i\,\vect c_i}{1+\alpha+w_i},\qquad w_i=\beta\,A^{\mathrm{out}}_i .
+    \end{equation}
+    Avec $\beta$ grand (défaut $10^6$), $\vect p_i'\simeq\vect c_i$ : les cellules du bord suivent Lloyd sans être
+    attirées, ce qui garde un bord régulier ; avec $\beta=0$ elles sont attirées comme les autres
+    (figure~\ref{fig:domaines}). Pour une cellule intérieure, $w_i=0$ et \eqref{eq:beta} se réduit
+    exactement à~\eqref{eq:update}.
+\end{itemize}
+Le rectangle doit déborder un peu de la forme (une ou deux cellules) pour qu'il reste des germes extérieurs.
+C'est la méthode de génération d'échantillons développée en Python avec \code{shapely} ; \cy{} la reprend sans
+dépendance, avec une forme quelconque au lieu d'un rectangle.
+
+\textbf{Découpe d'une cellule} (figure~\ref{fig:clip}). Le contour de la cellule convexe est échantillonné au pas
+$h=s/4$ et $f$ est évaluée en chaque échantillon. Si tous sont intérieurs, la cellule est intérieure ; si tous sont
+extérieurs, elle est extérieure. Sinon, en partant d'un échantillon intérieur, on parcourt le contour : les sommets
+intérieurs sont gardés ; chaque changement de signe de $f$ entre deux échantillons donne un point de passage,
+calculé par dichotomie (60 itérations, précision machine) ; entre une \emph{sortie} et l'\emph{entrée} suivante,
+le bord de la forme traverse la cellule : des points de la corde, espacés de $h/2$, sont projetés sur $f=0$ par
+la méthode de Newton ($\vect x\leftarrow\vect x-f\,\nabla f/\|\nabla f\|^2$, gradient par différences centrées) et
+ajoutés s'ils restent dans la cellule. Le bord courbe est ainsi suivi finement, et la partie intérieure peut être
+non convexe (bord concave). Un point de passage situé sur une paroi commune à deux cellules est calculé de la même
+façon des deux côtés : il devient un sommet partagé.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[scale=1.25]
+    \def\hex{(2,0)--(1,1.732)--(-1,1.732)--(-2,0)--(-1,-1.732)--(1,-1.732)--cycle}
+    \begin{scope}
+      \clip \hex;
+      \fill[accent!12] (-4.2,0.4) circle (4.9);
+    \end{scope}
+    \draw[thick] \hex;
+    \draw[bundle,very thick] (-4.2,0.4) ++(-28:4.9) arc (-28:28:4.9) node[above right,font=\footnotesize]{$f=0$};
+    \node[font=\footnotesize] at (-0.8,0.2) {$f<0$ (tissu)};
+    \node[font=\footnotesize] at (2.6,1.0) {$f>0$};
+    \foreach \p in {{(0.500,1.732)},{(0.000,1.732)},{(-0.500,1.732)},{(-1.000,1.732)},{(-1.250,1.299)},{(-1.500,0.866)},
+        {(-1.750,0.433)},{(-2.000,0.000)},{(-1.750,-0.433)},{(-1.500,-0.866)},{(-1.250,-1.299)},{(-1.000,-1.732)},
+        {(-0.500,-1.732)},{(-0.000,-1.732)}} \fill \p circle (1.4pt);
+    \foreach \p in {{(2.000,0.000)},{(1.750,0.433)},{(1.500,0.866)},{(1.250,1.299)},{(1.000,1.732)},{(0.500,-1.732)},
+        {(1.000,-1.732)},{(1.250,-1.299)},{(1.500,-0.866)},{(1.750,-0.433)}} \draw[fill=white] \p circle (1.4pt);
+    \draw[gray,dashed] (0.515,1.732)--(0.212,-1.732);
+    \foreach \a/\b in {{(0.494,1.485)}/{(0.574,1.503)},{(0.450,0.990)}/{(0.661,1.016)},{(0.407,0.495)}/{(0.699,0.501)},
+        {(0.364,0.000)}/{(0.681,-0.028)},{(0.320,-0.495)}/{(0.607,-0.552)},{(0.277,-0.990)}/{(0.480,-1.053)},
+        {(0.234,-1.485)}/{(0.309,-1.517)}} {\draw[->,gray,>=Stealth] \a--\b; \fill[accent] \b circle (1.3pt);}
+    \fill[bundle] (0.515,1.732) circle (2pt) node[above left,font=\footnotesize,text=black]{sortie};
+    \fill[bundle] (0.212,-1.732) circle (2pt) node[below left,font=\footnotesize,text=black]{entrée};
+    \begin{scope}[shift={(4.3,0.9)},font=\footnotesize]
+      \fill (0,0.6) circle (1.4pt); \node[right] at (0.15,0.6) {échantillon intérieur};
+      \draw[fill=white] (0,0.2) circle (1.4pt); \node[right] at (0.15,0.2) {échantillon extérieur};
+      \fill[bundle] (0,-0.2) circle (2pt); \node[right] at (0.15,-0.2) {passage (dichotomie)};
+      \fill[accent] (0,-0.6) circle (1.4pt); \node[right] at (0.15,-0.6) {projection de Newton};
+      \fill[accent!12] (-0.1,-1.1) rectangle (0.1,-0.9); \node[right] at (0.15,-1.0) {partie intérieure};
+    \end{scope}
+  \end{tikzpicture}
+  \caption{Découpe d'une cellule de Voronoï convexe par le bord de la forme (schéma ; une projection sur deux est
+    représentée, et le pas d'échantillonnage est exagéré).}
+  \label{fig:clip}
+\end{figure}
+
+\textbf{Écrire une forme.} \code{shape} est une expression de $f$ : opérateurs \code{+ - * / \textasciicircum}
+(puissance), parenthèses, fonctions \code{sin cos tan asin acos atan exp log sqrt abs floor ceil} et
+\code{atan2(y,x) min(a,b) max(a,b) pow(a,b)}, constantes \code{pi} et \code{e}. Variables : \code{x}, \code{y} ;
+\code{r} et \code{t}, rayon et angle (radians, dans $]-\pi,\pi]$) depuis le centre du rectangle ; \code{cx},
+\code{cy} (centre), \code{Lx}, \code{Ly}. Une fonction distance signée (comme \code{r - 18}) est idéale, mais
+n'importe quelle fonction continue convient pourvu que son gradient ne s'annule pas sur le bord. Opérations
+booléennes : union \code{min(f1, f2)}, intersection \code{max(f1, f2)}, différence \code{max(f1, -f2)}.
+
+\begin{center}
+\begin{tabular}{@{}ll@{}}
+  \toprule
+  Forme & \code{shape} \\
+  \midrule
+  disque de rayon 18 & \code{r - 18} \\
+  ellipse de demi-axes 18 et 11 & \code{((x-cx)/18)\textasciicircum2 + ((y-cy)/11)\textasciicircum2 - 1} \\
+  rectangle centré $30\times16$ & \code{max(abs(x-cx) - 15, abs(y-cy) - 8)} \\
+  anneau & \code{max(r - 18, 9 - r)} \\
+  disque échancré à droite & \code{r - 20 + 4.5*exp(-t\textasciicircum2/0.12)} \\
+  deux disques réunis & \code{min(sqrt((x-14)\textasciicircum2+(y-cy)\textasciicircum2) - 10, sqrt((x-30)\textasciicircum2+(y-cy)\textasciicircum2) - 10)} \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}{0.32\linewidth}\includegraphics[width=\linewidth]{figures/dom_disque.png}\caption{\code{r - 18}}\end{subfigure}\hfill
+  \begin{subfigure}{0.32\linewidth}\includegraphics[width=\linewidth]{figures/dom_anneau.png}\caption{anneau}\end{subfigure}\hfill
+  \begin{subfigure}{0.32\linewidth}\includegraphics[width=\linewidth]{figures/dom_ellipse.png}\caption{ellipse, $K=1000$, angle $0^\circ$}\end{subfigure}\\[2mm]
+  \begin{subfigure}{0.4\linewidth}\includegraphics[width=\linewidth]{figures/rein.png}\caption{\code{examples/rein.txt}}\end{subfigure}\hfill
+  \begin{subfigure}{0.26\linewidth}\includegraphics[width=\linewidth]{figures/rein_zoom.png}\caption{zoom sur l'échancrure}\end{subfigure}\hfill
+  \begin{subfigure}{0.3\linewidth}\includegraphics[width=\linewidth]{figures/rein_beta0.png}\caption{même forme, $\beta=0$}\end{subfigure}
+  \caption{Domaines définis par une fonction ($\alpha=0.05$, 5\,\% de bundles, 50 itérations). Le bord du tissu est
+    tracé en trait épais.}
+  \label{fig:domaines}
+\end{figure}
+
+\textbf{Limites.} Une partie de la forme plus petite qu'une cellule et qui ne coupe aucun de ses côtés
+(îlot isolé) n'est pas vue. Un bord très sinueux à l'échelle d'une cellule peut couper un côté plusieurs fois
+entre deux échantillons ($h=s/4$) ; la forme doit varier lentement à cette échelle. Une cellule coupée en deux
+morceaux disjoints est représentée par un seul polygone.
+
+\subsection{Pavage à sommets partagés}\label{sec:mesh}
+
+Chaque cellule est calculée indépendamment : un sommet commun à trois cellules est donc calculé trois fois, à
+quelques $10^{-16}$ près. Les sommets sont fusionnés à la tolérance $10^{-8}s$ (table de hachage sur une grille de
+pas $10^{-6}s$). Une paroi qui n'appartient qu'à une cellule est une paroi du \emph{bord du tissu} ; une cellule qui
+en possède une est une cellule de bord. Ce critère est purement topologique : il vaut pour le rectangle comme pour
+n'importe quelle forme.
+
+\subsection{Métriques}\label{sec:metriques}
+
+Calculées sur le pavage final (cellules du tissu, bords compris), elles reprennent celles de l'article :
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}lX@{}}
+  \toprule
+  Nom & Définition \\
+  \midrule
+  \code{nCells}, \code{nBundles} & nombre de cellules du tissu, de bundles \\
+  \code{meanSI} & indice de forme moyen $\langle SI\rangle=\langle4\pi A/P^2\rangle$ (compacité ; 1 pour un disque,
+    0.907 pour l'hexagone régulier, 0.785 pour le carré) \\
+  \code{cvA} & coefficient de variation des aires $\sigma_A/\langle A\rangle$ (hétérogénéité) \\
+  \code{dNN} & distance moyenne entre le centroïde d'une cellule et le plus proche autre centroïde, rapportée à $s$
+    (environ 1.07 pour l'hexagone régulier) \\
+  \code{dM} & distance de Mahalanobis moyenne entre le centroïde d'une cellule ordinaire et le plus proche centroïde de
+    bundle, rapportée à $s$ (avec $\Sigma$ telle que définie, non normalisée) \\
+  \code{areaRegular}, \code{areaBundle} & aire moyenne des cellules ordinaires, des bundles ($A_0=0.785$) \\
+  \code{SIRegular}, \code{SIBundle} & indice de forme moyen des cellules ordinaires, des bundles \\
+  \code{meanSides} & nombre moyen de côtés des cellules intérieures (6 en moyenne pour un pavage de Voronoï,
+    par le théorème d'Euler) \\
+  \code{lastMove} & déplacement moyen des germes à la dernière itération, rapporté à $s$ \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+La ligne de commande affiche aussi l'histogramme du nombre de côtés des cellules intérieures.
+
+%======================================================================
+\section{Fichiers}\label{sec:fichiers}
+%======================================================================
+
+\subsection{Fichier de cellules}
+
+Fichier texte (\code{\#} pour les commentaires), écrit avec 17 chiffres significatifs :
+\begin{lstlisting}
+cellyod 1
+param <mot-clé> <valeur>        tous les paramètres du tissu (même syntaxe que le fichier de paramètres)
+domain xmin ymin xmax ymax       rectangle des germes
+iteration <n>                   nombre d'itérations effectuées
+vertices <N>                    puis N lignes : x y
+cells <M>                       puis M lignes : type sx sy nv v0 v1 ... v(nv-1)
+frozen <K>                      puis K lignes : sx sy   (germes extérieurs ; absent sans forme)
+\end{lstlisting}
+L'identifiant d'une cellule est son rang dans la section \code{cells} (à partir de 0) ; \code{type} vaut 0 pour une
+cellule ordinaire, 1 pour un bundle ; \code{(sx, sy)} est son germe ; ses \code{nv} sommets, indices dans la section
+\code{vertices}, sont donnés dans le sens trigonométrique. Les sommets sont partagés : deux cellules voisines
+référencent les mêmes indices le long de leur paroi commune, et une paroi n'appartenant qu'à une cellule est sur
+le bord du tissu. Exemple (réseau hexagonal $6\times6$, début du fichier) :
+\lstinputlisting{figures/petit_extrait.txt}
+
+\paragraph{Lire le fichier.} Pour un autre programme : lire les lignes \code{param} si besoin, puis $N$ couples
+$(x,y)$ après \code{vertices}, puis $M$ lignes après \code{cells} dont on garde \code{type} et la liste de sommets.
+Une représentation « un polygone par cellule » s'en déduit directement (une option d'export dans ce sens est
+prévue).
+
+\subsection{Reprise d'un calcul}\label{sec:reprise}
+
+Le pavage est entièrement déterminé par les germes et les paramètres : \code{-load} (ou \emph{Charger} dans
+l'interface) relit les paramètres, les germes des cellules et les germes figés, et reconstruit le pavage. Comme le
+calcul de Voronoï ne dépend pas de la numérotation des germes, poursuivre un calcul enregistré donne exactement
+(au bit près) les mêmes germes qu'un calcul d'une traite. Seule la numérotation des cellules peut différer quand
+une forme est utilisée : un germe figé dont la cellule entre dans la forme au cours du calcul est placé à la fin.
+
+\subsection{Fichier \texttt{morphology}}\label{sec:morpho}
+
+Avec \code{morphology fichier}, chaque exécution ajoute une ligne : tous les paramètres numériques et de choix
+(la forme, texte, n'y figure pas), le nombre d'itérations, puis les métriques de la section~\ref{sec:metriques}.
+L'en-tête (\code{\#} puis les noms de colonnes) est écrit à la création du fichier. Un balayage se fait en
+relançant \cy{} avec des paramètres différents et le même fichier (section~\ref{sec:etudes}).
+
+\subsection{SVG}
+
+Vue vectorielle du tissu, dans le même style que l'interface : cellules sombres, parois blanches, bord du tissu
+épais, germes gris cerclés, bundles en rouge saumon, légende. \code{svgSeeds 0} retire les germes,
+\code{svgLegend 0} la légende ; \code{svg none} supprime le fichier. Un SVG s'ouvre dans un navigateur (zoom
+illimité) et se convertit en PNG avec Inkscape :
+\code{inkscape cells.svg --export-type=png -w 2000}.
+
+%======================================================================
+\section{Interface graphique}\label{sec:gui}
+%======================================================================
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{figures/gui.png}
+  \caption{\cyg{} avec \code{examples/rein.txt}. À gauche la vue, à droite le panneau (qui défile), en bas la
+    barre d'état.}
+  \label{fig:gui}
+\end{figure}
+
+\textbf{Vue.} Molette : zoom autour de la souris ; glisser (n'importe quel bouton) : déplacer ; clic gauche sans
+déplacement sur une cellule : bundle on/off. La barre d'état donne les coordonnées et la cellule survolée
+(numéro, nombre de côtés, aire, indice de forme), l'aide du paramètre survolé dans le panneau, ou le dernier
+message (erreurs en rouge).
+
+\textbf{Panneau.}
+\begin{itemize}
+  \item \emph{Simulation} : \emph{Lancer/Pause} (Espace), \emph{Pas} (S ou $\rightarrow$, une itération),
+    \emph{Régénérer} (R, retour à l'itération 0 avec de nouveaux germes), \emph{Calcul direct} (sans animation,
+    jusqu'à \code{lloydIterations}) ; arrêt automatique à \code{lloydIterations} (à décocher pour itérer sans
+    limite) ; nombre d'itérations par image (l'animation reste limitée à environ 30~ms de calcul par image).
+  \item \emph{Paramètres} : tous les paramètres, groupés comme dans \code{-h}. Un curseur (logarithmique pour
+    \code{anisotropy} et \code{beta}) et une valeur ; cliquer sur la valeur pour la taper (Entrée pour valider).
+    Les choix (\code{lattice}, \code{bundleMotion}) sont des boutons ; \code{shape} est un champ de texte. Un
+    paramètre marqué \code{*} régénère les germes et relance l'animation ; les autres s'appliquent à l'itération
+    suivante (section~\ref{sec:effets}).
+  \item \emph{Affichage} : \emph{Uni} (rendu de la figure~\ref{fig:gui}), ou coloration par nombre de côtés
+    (palette discrète ; les cellules de bord sont estompées), par aire ou par indice de forme (palette continue,
+    échelle min--max affichée) ; germes et parois ; \emph{Recadrer} (F).
+  \item \emph{Métriques} : valeurs courantes ; un clic sur une métrique trace son évolution en fonction de
+    l'itération depuis la dernière régénération ; histogramme du nombre de côtés.
+  \item \emph{Fichiers} : nom du fichier de cellules ; \emph{Enregistrer} (Ctrl+S) écrit ce fichier et le SVG de
+    même nom ; \emph{Charger} relit un fichier de cellules ou de paramètres ; \emph{Paramètres} écrit
+    \code{<nom>\_params.txt}. Un fichier peut aussi être glissé-déposé dans la fenêtre.
+\end{itemize}
+Les réglages d'affichage (taille de fenêtre, police, coloration, vitesse\dots) sont conservés dans
+\code{cellyod-gui.ini}, dans le répertoire courant. \code{cellyod-gui fichier --screenshot image.png} calcule
+jusqu'à \code{lloydIterations}, enregistre une capture et quitte (utilisé pour la figure~\ref{fig:gui}).
+
+\textbf{Démarche conseillée.} (1) Régler le domaine et la forme avec $\alpha=0$ et quelques itérations ;
+(2) choisir \code{bundleFraction} ; (3) lancer l'animation et ajuster $\alpha$, $K$ et l'angle en regardant le tissu
+et la courbe de \code{cvA} ; (4) arrêter au bon nombre d'itérations, ajouter ou retirer des bundles à la souris
+si besoin ; (5) enregistrer, et exporter les paramètres pour reproduire ou décliner le tissu en ligne de
+commande.
+
+%======================================================================
+\section{Études types}\label{sec:etudes}
+%======================================================================
+
+\paragraph{Balayage d'un paramètre.} Les courbes de la figure~\ref{fig:curves} sont produites ainsi
+(\code{doc/make\_figures.sh}) :
+\begin{lstlisting}
+for a in 0 0.01 0.02 0.05 0.1 0.15 0.2; do
+  ./cellyod examples/tissu.txt alpha=$a output=/dev/null svg=none morphology=balayage.txt
+done
+\end{lstlisting}
+Pour une évolution en fonction des itérations, varier \code{lloydIterations} de la même façon, ou enchaîner des
+reprises (\code{-load}) pour ne pas recalculer le début.
+
+\paragraph{Variabilité.} Les métriques dépendent du tirage : répéter avec plusieurs \code{seed} et moyenner.
+Pour le tissu de référence en $30\times30$ et 50 itérations, six graines donnent \code{cvA} entre 0.63 et 0.75
+(écart type d'environ 0.04), mais $\langle SI\rangle$ entre 0.862 et 0.865 : l'hétérogénéité des aires, dominée par
+quelques amas, est la métrique la plus sensible au tirage, et un domaine plus grand la réduit.
+
+\paragraph{Régimes successifs.} Les paramètres vivants permettent d'enchaîner des régimes : par exemple
+20 itérations de Lloyd pur pour régulariser, puis l'attraction :
+\begin{lstlisting}
+./cellyod lattice=uniform lloydIterations=20 output=a.txt svg=none
+./cellyod -load a.txt bundleFraction=0.05 alpha=0.05 lloydIterations=70   # ! bundleFraction ignoré
+\end{lstlisting}
+Attention : un paramètre de régénération (ici \code{bundleFraction}) n'a pas d'effet sur une reprise ; dans ce cas,
+choisir les bundles dès le départ avec $\alpha=0$, puis passer $\alpha$ à 0.05 à la reprise.
+
+\paragraph{Grands tissus.} Le temps est proportionnel au nombre de cellules (environ 2~µs par cellule et par
+itération, plus la recherche du bundle le plus proche, proportionnelle au nombre de bundles) : $100\times100$
+(12\,700 cellules), 20 itérations, en 0.7~s.
+
+%======================================================================
+\section{Organisation du code}\label{sec:code}
+%======================================================================
+
+\begin{center}
+\begin{tabularx}{\linewidth}{@{}lX@{}}
+  \toprule
+  Fichier & Rôle \\
+  \midrule
+  \code{src/geom.hpp} & vecteur \code{V}, polygones : aire signée, périmètre, centroïde \\
+  \code{src/expr.hpp/.cpp} & analyseur d'expressions (descente récursive vers une notation polonaise inverse,
+    évaluée sur une pile) \\
+  \code{src/params.hpp/.cpp} & structure \code{Params} et registre \code{paramSpecs()} ; lecture et écriture des
+    paramètres, aide \\
+  \code{src/tissue.hpp/.cpp} & \code{Domain} (rectangle, forme, découpe), \code{Mahalanobis}, \code{Tissue}
+    (germes, Voronoï, itérations, sommets partagés), \code{computeMetrics} \\
+  \code{src/io.hpp/.cpp} & fichier de cellules, SVG, fichier \code{morphology} \\
+  \code{src/cli.cpp} & ligne de commande \\
+  \code{gui/cellyod\_gui.cpp} & interface raylib/raygui \\
+  \code{doc/} & ce tutoriel et \code{make\_figures.sh} \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+\textbf{Classe \code{Tissue}.} \code{init(P)} place les germes et choisit les bundles ; \code{step()} fait une
+itération (avec les paramètres courants \code{P}, que l'on peut modifier entre deux pas) ; \code{run()} itère jusqu'à
+\code{lloydIterations} ; \code{restore()} reprend un état enregistré ; \code{mesh()} construit le pavage à sommets
+partagés. Les membres \code{seeds}, \code{isBundle}, \code{voronoi} (cellules dans le rectangle) et \code{cells}
+(parties dans la forme, vides pour les germes figés) décrivent l'état courant.
+
+\textbf{Ajouter un paramètre.} Un champ dans \code{Params} et une ligne dans \code{paramSpecs()} (nom, groupe, aide,
+bornes du curseur, échelle logarithmique, régénération ou non) suffisent : la lecture des fichiers, l'écriture dans
+les fichiers de cellules, l'aide \code{-h}, le fichier \code{morphology} et le panneau de l'interface sont construits
+à partir du registre. Il reste à l'utiliser dans \code{Tissue::init} ou \code{Tissue::step}.
+
+\textbf{Ajouter une métrique.} Un champ dans \code{Metrics}, son calcul dans \code{computeMetrics}, une entrée
+dans \code{Metrics::items()} : elle apparaît dans l'interface (avec sa courbe) et dans le fichier \code{morphology}.
+
+\textbf{Ajouter une coloration.} Une ligne dans \code{COLOR\_FIELDS} (\code{gui/cellyod\_gui.cpp}) : nom,
+discrète ou continue, fonction donnant la valeur d'une cellule.
+
+\textbf{Changer la forme du domaine.} Tout passe par \code{Domain} : \code{f} (valeur de la fonction),
+\code{inShape} et \code{clip} (partie d'une cellule dans la forme). Une autre description de la forme (polygone lu
+dans un fichier, image binaire\dots) se branche en remplaçant l'évaluation de $f$.
+
+\textbf{Validation.} Sans forme, \cy{} reproduit \code{nodeGenPlantCom} (avec \code{minEdgeRatio 0}, c'est-à-dire sans
+reconformation) : mêmes nombres de cellules et mêmes métriques pour les quatre états initiaux, avec ou sans
+bundles et anisotropie. Les reprises (\code{-load}) sont vérifiées identiques au bit près.
+
+\textbf{Pistes.} Export « un polygone par cellule » ; décalage des parois (épaisseur) pour les codes
+d'éléments discrets ; forme lue dans un fichier (polygone, image) ; métriques par région ; parallélisation du
+calcul de Voronoï (chaque cellule est indépendante).
+
+\end{document}
