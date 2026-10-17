@@ -7,6 +7,9 @@
 //
 // Toutes les grandeurs sont sans dimension : l'unité de longueur est le diamètre équivalent visé des cellules
 // (aire visée d'une cellule : pi/4).
+//
+// Forme du domaine : les germes remplissent le rectangle [0, Lx] x [0, Ly] ; le tissu est la partie
+// { f(x, y) <= 0 } de ce rectangle, f étant donnée par l'expression shape (vide : tout le rectangle).
 #pragma once
 
 #include "geom.hpp"
@@ -16,8 +19,10 @@
 #include <vector>
 
 struct Params {
-  // Domaine rectangulaire [0, Lx] x [0, Ly]
+  // Rectangle des germes [0, Lx] x [0, Ly] et forme du tissu { f(x, y) <= 0 }
   double Lx{40.0}, Ly{40.0};
+  std::string shape;   // expression de f (vide : tout le rectangle)
+  double beta{1e6};    // cellules coupées par le bord : poids beta * aire extérieure du centroïde intérieur
   // Germes initiaux
   int lattice{0};       // indice dans LATTICES
   double disorder{0.3}; // réseaux hex et square : perturbation des germes, en fraction du pas
@@ -42,7 +47,7 @@ enum BundleMotion { MOTION_LLOYD = 0, MOTION_FIXED, MOTION_ATTRACT };
 extern const std::vector<std::string> LATTICES;
 extern const std::vector<std::string> BUNDLE_MOTIONS;
 
-enum class ParamKind { Real, Int, Choice };
+enum class ParamKind { Real, Int, Choice, Text };
 
 struct ParamSpec {
   const char *name;
@@ -51,12 +56,13 @@ struct ParamSpec {
   ParamKind kind;
   double Params::*real{nullptr};
   int Params::*integer{nullptr}; // Int et Choice (indice dans choices)
+  std::string Params::*str{nullptr}; // Text
   const std::vector<std::string> *choices{nullptr};
   double lo{0.0}, hi{1.0}; // bornes conseillées (curseurs de l'interface)
   bool logScale{false};
   bool reseed{false}; // une modification impose de régénérer les germes (sinon : effet dès l'itération suivante)
 
-  double get(const Params &p) const;
+  double get(const Params &p) const; // Real, Int, Choice
   void set(Params &p, double v) const;
   std::string text(const Params &p) const;
   void parse(Params &p, const std::string &value) const; // lève std::runtime_error
@@ -64,6 +70,8 @@ struct ParamSpec {
 
 const std::vector<ParamSpec> &paramSpecs();
 const ParamSpec *findParam(const std::string &name);
+// Variables de l'expression shape : x y r t cx cy Lx Ly
+const std::vector<std::string> &shapeVariables();
 
 // Affecte un mot-clé (registre, ou mots-clés spéciaux : anisotropy K [angle], bundle x y, output, svg,
 // morphology). Lève std::runtime_error avec un message en clair.

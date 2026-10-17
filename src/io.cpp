@@ -20,13 +20,28 @@ void saveCells(const std::string &file, const Tissue &t, const CellMesh &m) {
   for (const V &q : m.verts) {
     os << q.x << ' ' << q.y << '\n';
   }
-  os << "cells " << m.cells.size() << '\n';
+  size_t nIn = 0;
+  for (const auto &ids : m.cells) {
+    nIn += !ids.empty();
+  }
+  os << "cells " << nIn << '\n';
   for (size_t c = 0; c < m.cells.size(); c++) {
+    if (m.cells[c].empty()) {
+      continue;
+    }
     os << (int)t.isBundle[c] << ' ' << t.seeds[c].x << ' ' << t.seeds[c].y << ' ' << m.cells[c].size();
     for (int v : m.cells[c]) {
       os << ' ' << v;
     }
     os << '\n';
+  }
+  if (nIn < m.cells.size()) {
+    os << "frozen " << m.cells.size() - nIn << '\n';
+    for (size_t c = 0; c < m.cells.size(); c++) {
+      if (m.cells[c].empty()) {
+        os << t.seeds[c].x << ' ' << t.seeds[c].y << '\n';
+      }
+    }
   }
 }
 
@@ -91,6 +106,17 @@ Tissue loadCells(const std::string &file) {
         seeds.push_back(s);
         bundle.push_back(type == 1);
       }
+    } else if (key == "frozen") {
+      size_t n = 0;
+      is >> n;
+      for (size_t i = 0; i < n; i++) {
+        V s;
+        if (!next(is) || !(is >> s.x >> s.y)) {
+          throw std::runtime_error(file + " : germe extérieur " + std::to_string(i) + " illisible");
+        }
+        seeds.push_back(s);
+        bundle.push_back(0);
+      }
     } else {
       throw std::runtime_error(file + " : mot-clé inconnu " + key);
     }
@@ -103,6 +129,7 @@ Tissue loadCells(const std::string &file) {
   return t;
 }
 
+// Style de rendu : cellules sombres, parois blanches, germes gris, bundles en rouge saumon
 void writeSVG(const std::string &file, const Tissue &t, const CellMesh &m, const SvgOptions &opt) {
   std::ofstream os(file);
   if (!os) {
@@ -118,24 +145,56 @@ void writeSVG(const std::string &file, const Tissue &t, const CellMesh &m, const
   };
   os << "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" << f(opt.widthPx) << "\" height=\"" << f(H)
      << "\" viewBox=\"0 0 " << f(opt.widthPx) << ' ' << f(H) << "\">\n";
-  os << "<rect width=\"100%\" height=\"100%\" fill=\"#f4f8ef\"/>\n";
-  const double sw = std::max(0.5, 0.025 * s);
-  os << "<g stroke=\"#5a9a4f\" stroke-width=\"" << f(sw) << "\" stroke-linejoin=\"round\">\n";
-  for (size_t c = 0; c < m.cells.size(); c++) {
-    os << "<polygon fill=\"" << (t.isBundle[c] ? "#7fb069" : "#e3efd8") << "\" points=\"";
-    for (int v : m.cells[c]) {
+  os << "<rect width=\"100%\" height=\"100%\" fill=\"#000000\"/>\n";
+  const double sw = std::max(0.5, 0.04 * s);
+  os << "<g fill=\"#0f111a\" stroke=\"#f2f2f5\" stroke-width=\"" << f(sw) << "\" stroke-linejoin=\"round\">\n";
+  for (const auto &ids : m.cells) {
+    if (ids.empty()) {
+      continue;
+    }
+    os << "<polygon points=\"";
+    for (int v : ids) {
       os << f(X(m.verts[v].x)) << ',' << f(Y(m.verts[v].y)) << ' ';
     }
     os << "\"/>\n";
   }
   os << "</g>\n";
+  // bord du tissu
+  os << "<path fill=\"none\" stroke=\"#ffffff\" stroke-width=\"" << f(2.0 * sw) << "\" stroke-linecap=\"round\" d=\"";
+  for (const auto &e : m.boundaryEdges) {
+    os << 'M' << f(X(m.verts[e.first].x)) << ',' << f(Y(m.verts[e.first].y)) << 'L' << f(X(m.verts[e.second].x))
+       << ',' << f(Y(m.verts[e.second].y));
+  }
+  os << "\"/>\n";
+  const double rs = std::max(1.0, 0.07 * s), rb = std::max(2.0, 0.22 * s);
   if (opt.seeds) {
-    os << "<g fill=\"#5a9a4f\">\n";
+    os << "<g fill=\"#8e8f9c\" stroke=\"#c9cad3\" stroke-width=\"" << f(0.4 * rs) << "\">\n";
     for (size_t i = 0; i < t.seeds.size(); i++) {
-      os << "<circle cx=\"" << f(X(t.seeds[i].x)) << "\" cy=\"" << f(Y(t.seeds[i].y)) << "\" r=\""
-         << f(std::max(1.0, 0.06 * s)) << "\"" << (t.isBundle[i] ? " fill=\"#2f5d27\"" : "") << "/>\n";
+      if (t.inside(i) && !t.isBundle[i]) {
+        os << "<circle cx=\"" << f(X(t.seeds[i].x)) << "\" cy=\"" << f(Y(t.seeds[i].y)) << "\" r=\"" << f(rs)
+           << "\"/>\n";
+      }
     }
     os << "</g>\n";
+  }
+  os << "<g fill=\"#f07470\">\n";
+  for (size_t i = 0; i < t.seeds.size(); i++) {
+    if (t.inside(i) && t.isBundle[i]) {
+      os << "<circle cx=\"" << f(X(t.seeds[i].x)) << "\" cy=\"" << f(Y(t.seeds[i].y)) << "\" r=\"" << f(rb)
+         << "\"/>\n";
+    }
+  }
+  os << "</g>\n";
+  if (opt.legend && t.nBundles() > 0) {
+    const double fs = std::max(12.0, 0.022 * opt.widthPx), lw = 6.8 * fs, lh = 1.8 * fs;
+    const double lx = opt.widthPx - lw - fs, ly = H - lh - fs;
+    os << "<g font-family=\"sans-serif\" font-size=\"" << f(fs) << "\">\n"
+       << "<rect x=\"" << f(lx) << "\" y=\"" << f(ly) << "\" width=\"" << f(lw) << "\" height=\"" << f(lh)
+       << "\" rx=\"" << f(0.25 * fs) << "\" fill=\"#000000\" stroke=\"#f2f2f5\" stroke-width=\"1.5\"/>\n"
+       << "<rect x=\"" << f(lx + 0.5 * fs) << "\" y=\"" << f(ly + 0.5 * fs) << "\" width=\"" << f(1.6 * fs)
+       << "\" height=\"" << f(0.8 * fs) << "\" fill=\"#f07470\"/>\n"
+       << "<text x=\"" << f(lx + 2.6 * fs) << "\" y=\"" << f(ly + 1.25 * fs) << "\" fill=\"#f2f2f5\">Bundles</text>\n"
+       << "</g>\n";
   }
   os << "</svg>\n";
 }
@@ -150,7 +209,9 @@ void appendMorphology(const std::string &file, const Tissue &t, const Metrics &m
   if (fresh) {
     os << "#";
     for (const auto &s : paramSpecs()) {
-      os << ' ' << s.name;
+      if (s.kind != ParamKind::Text) { // la forme (texte avec espaces) n'est pas une colonne
+        os << ' ' << s.name;
+      }
     }
     os << " iteration";
     for (const auto &it : items) {
@@ -161,8 +222,10 @@ void appendMorphology(const std::string &file, const Tissue &t, const Metrics &m
   os.precision(8);
   bool first = true;
   for (const auto &s : paramSpecs()) {
-    os << (first ? "" : " ") << s.text(t.P);
-    first = false;
+    if (s.kind != ParamKind::Text) {
+      os << (first ? "" : " ") << s.text(t.P);
+      first = false;
+    }
   }
   os << ' ' << t.iteration;
   for (const auto &it : items) {

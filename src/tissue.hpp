@@ -8,21 +8,32 @@
 
 #include "params.hpp"
 
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
-// Domaine de pavage. Seul le rectangle [0, Lx] x [0, Ly] existe pour l'instant ; tout ce qui dépend de la forme
-// du domaine passe par cette structure.
+class Expr;
+
+// Domaine. Les germes remplissent le rectangle [0, Lx] x [0, Ly] et le pavage de Voronoï y est découpé ; le tissu
+// est la partie { f <= 0 } de ce rectangle, f étant l'expression shape (sans forme : tout le rectangle). Une
+// cellule est découpée par le bord de la forme ; une cellule entièrement extérieure est vide et son germe reste
+// immobile : les germes extérieurs forment la paroi qui contient le tissu.
 struct Domain {
   double Lx{1.0}, Ly{1.0};
-  explicit Domain(const Params &p) : Lx(p.Lx), Ly(p.Ly) {}
-  double area() const { return Lx * Ly; }
+  std::shared_ptr<const Expr> shape;
+
+  Domain() = default;
+  explicit Domain(const Params &p); // lève std::runtime_error si l'expression est invalide
+  double area() const { return Lx * Ly; } // aire du rectangle des germes
   bool contains(const V &q) const { return q.x > 0.0 && q.x < Lx && q.y > 0.0 && q.y < Ly; }
-  bool onBoundary(const V &q, double tol) const {
-    return std::fabs(q.x) < tol || std::fabs(q.x - Lx) < tol || std::fabs(q.y) < tol || std::fabs(q.y - Ly) < tol;
-  }
   Polygon polygon() const { return {V(0.0, 0.0), V(Lx, 0.0), V(Lx, Ly), V(0.0, Ly)}; }
+  bool hasShape() const { return (bool)shape; }
+  double f(const V &q) const; // < 0 dans la forme
+  bool inShape(const V &q) const { return !shape || f(q) <= 0.0; }
+  // Partie de la cellule convexe poly (sens trigonométrique) dans la forme, bord courbe échantillonné au pas h ;
+  // cut : la cellule est coupée par le bord de la forme
+  Polygon clip(const Polygon &poly, double h, bool &cut) const;
 };
 
 // Carré de la distance de Mahalanobis d² = u^T Sigma^-1 u, avec Sigma = K a a^T + b b^T (a : direction des
@@ -37,8 +48,10 @@ struct Mahalanobis {
 // Pavage à sommets partagés
 struct CellMesh {
   std::vector<V> verts;
-  std::vector<std::vector<int>> cells; // sommets de chaque cellule, sens trigonométrique (indice = germe)
-  std::vector<char> boundary;          // cellule touchant le bord du domaine
+  std::vector<std::vector<int>> cells;          // sommets de chaque cellule, sens trigonométrique (indice = germe ;
+                                                // vide pour un germe extérieur à la forme)
+  std::vector<char> boundary;                   // cellule touchant le bord du tissu
+  std::vector<std::pair<int, int>> boundaryEdges; // parois du bord du tissu (n'appartenant qu'à une cellule)
 };
 
 class Tissue {
@@ -46,7 +59,10 @@ public:
   Params P;
   std::vector<V> seeds;
   std::vector<char> isBundle;
-  std::vector<Polygon> cells; // Voronoï des germes courants, découpé au domaine (indice = germe)
+  Domain domain;
+  std::vector<Polygon> voronoi; // Voronoï des germes courants, découpé au rectangle (indice = germe)
+  std::vector<Polygon> cells;   // partie de chaque cellule dans la forme (vide : germe extérieur)
+  std::vector<double> areaOut;  // aire de la partie extérieure à la forme
   int iteration{0};
   double lastMove{0.0}; // déplacement moyen des germes à la dernière itération, en fraction de spacing()
 
@@ -60,18 +76,20 @@ public:
   void run();
   // Le germe le plus proche de q change de statut (bundle <-> ordinaire) ; renvoie son indice
   int toggleBundle(const V &q);
+  // Germe le plus proche de q parmi ceux dont la cellule n'est pas vide (-1 si aucun)
   int nearestSeed(const V &q) const;
+  bool inside(size_t i) const { return cells[i].size() >= 3; }
 
   // Espacement visé entre germes : côté du carré de même aire qu'une cellule, sqrt(pi/4)
   static double spacing();
-  size_t nBundles() const;
+  size_t nBundles() const; // bundles dans la forme
   CellMesh mesh() const;
 
 private:
   void updateVoronoi();
 };
 
-// Métriques morphologiques de l'article, calculées sur le pavage (toutes les cellules, bords compris) :
+// Métriques morphologiques de l'article, calculées sur le tissu (toutes les cellules, bords compris) :
 //   <SI>        indice de forme moyen, SI = 4 pi A / P² (compacité ; hexagone régulier : 0.907)
 //   sigma_A/<A> coefficient de variation des aires (hétérogénéité)
 //   <d_NN>      distance moyenne au plus proche voisin (centroïdes), rapportée à l'espacement visé

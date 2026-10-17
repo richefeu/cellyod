@@ -1,0 +1,15 @@
+# cellyod : tissu dans un domaine non convexe (disque échancré)
+# Les germes remplissent le rectangle Lx x Ly ; le tissu est la partie shape <= 0.
+# r et t : rayon et angle (radians) depuis le centre du rectangle.
+Lx 46
+Ly 46
+shape  r - 20 + 4.5*exp(-t^2/0.12)    # disque de rayon 20, échancré à droite (t = 0)
+beta   1e6                            # cellules coupées par le bord : Lloyd sans attraction
+lattice         random
+lloydIterations 50
+seed            1
+bundleFraction  0.05
+alpha           0.05
+anisotropy      1
+output          rein_cells.txt
+svg             rein.svg

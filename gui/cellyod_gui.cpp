@@ -37,12 +37,13 @@
 // Thème et configuration
 // ================================================================================================
 
-static const Color COL_BG = {244, 248, 239, 255};       // fond de la vue
-static const Color COL_CELL = {227, 239, 216, 255};     // cellule ordinaire
-static const Color COL_BUNDLE = {127, 176, 105, 255};   // bundle
-static const Color COL_EDGE = {90, 154, 79, 255};       // parois
-static const Color COL_SEED = {90, 154, 79, 255};       // germes
-static const Color COL_SEED_B = {47, 93, 39, 255};      // germes des bundles
+// Vue : cellules sombres, parois blanches, germes gris, bundles rouge saumon (même style que le SVG, io.cpp)
+static const Color COL_BG = {0, 0, 0, 255};             // fond de la vue
+static const Color COL_CELL = {15, 17, 26, 255};        // cellules
+static const Color COL_EDGE = {242, 242, 245, 255};     // parois
+static const Color COL_SEED = {142, 143, 156, 255};     // germes
+static const Color COL_SEED_RING = {201, 202, 211, 255};
+static const Color COL_BUNDLE = {240, 116, 112, 255};   // bundles
 static const Color COL_PANEL = {255, 255, 255, 255};
 static const Color COL_PANEL_EDGE = {221, 225, 230, 255};
 static const Color COL_TEXT = {43, 47, 54, 255};
@@ -166,6 +167,7 @@ struct App {
   float contentH{1000.0f};
   int editing{-1}; // paramètre en cours de saisie (-1 : aucun ; -2 : nom de fichier)
   char editBuf[128]{};
+  char textBuf[512]{}; // saisie d'un paramètre texte (expression de la forme)
   char file[256]{"cells.txt"};
   std::string message;
   bool messageError{false};
@@ -193,7 +195,7 @@ static void refresh() {
     for (int v : a.M.cells[c]) {
       p.push_back(a.M.verts[v]);
     }
-    a.D.sides[c] = (int)p.size();
+    a.D.sides[c] = (int)p.size(); // 0 : germe extérieur
     if (p.size() >= 3) {
       double A = std::fabs(signedArea(p)), per = perimeter(p);
       a.D.area[c] = A;
@@ -205,6 +207,9 @@ static void refresh() {
     a.vmin = 1e300;
     a.vmax = -1e300;
     for (size_t c = 0; c < nc; c++) {
+      if (a.M.cells[c].empty()) {
+        continue;
+      }
       double v = f.value(a.D, c);
       a.vmin = std::min(a.vmin, v);
       a.vmax = std::max(a.vmax, v);
@@ -266,7 +271,7 @@ static void applyParams() {
   App &a = app;
   bool reseed = false;
   for (const auto &s : paramSpecs()) {
-    reseed = reseed || (s.reseed && s.get(a.P) != s.get(a.T.P));
+    reseed = reseed || (s.reseed && s.text(a.P) != s.text(a.T.P));
   }
   if (reseed) {
     regenerate();
@@ -365,7 +370,7 @@ static Color cellColor(size_t c) {
   const App &a = app;
   const ColorField &f = COLOR_FIELDS[a.colorField];
   if (!f.value) {
-    return a.T.isBundle[c] ? COL_BUNDLE : COL_CELL;
+    return COL_CELL;
   }
   if (f.discrete) {
     Color col = sidesColor((int)f.value(a.D, c));
@@ -388,48 +393,63 @@ static void drawTissue() {
     if (cell.size() < 3) {
       continue;
     }
+    // éventail depuis le centroïde : convient aussi aux cellules non convexes coupées par le bord (étoilées)
     pts.clear();
+    Polygon poly;
     for (int v : cell) {
-      pts.push_back(toScreen(a.M.verts[v]));
+      poly.push_back(a.M.verts[v]);
     }
+    pts.push_back(toScreen(centroid(poly)));
+    for (const V &q : poly) {
+      pts.push_back(toScreen(q));
+    }
+    pts.push_back(pts[1]);
     DrawTriangleFan(pts.data(), (int)pts.size(), cellColor(c));
   }
   rlEnableBackfaceCulling();
+  float th = (float)std::clamp(0.035 * a.zoom, 1.0, 3.0);
+  Color edge = a.colorField == 0 ? COL_EDGE : Color{242, 242, 245, 150};
   if (a.showEdges) {
-    float th = (float)std::clamp(0.03 * a.zoom, 1.0, 3.0);
-    Color edge = a.colorField == 0 ? COL_EDGE : Color{40, 44, 52, 150};
     for (const auto &cell : a.M.cells) {
       for (size_t k = 0; k < cell.size(); k++) {
         int u = cell[k], w = cell[(k + 1) % cell.size()];
-        if (u < w || cell.size() < 3) { // chaque paroi intérieure est partagée : tracée une fois
+        if (u < w) { // chaque paroi intérieure est partagée : tracée une fois (le bord est tracé plus bas)
           DrawLineEx(toScreen(a.M.verts[u]), toScreen(a.M.verts[w]), th, edge);
         }
       }
     }
-    // les parois de bord n'apparaissent qu'une fois (sens quelconque) : contour du domaine
-    Vector2 p0 = toScreen(V(0, 0)), p1 = toScreen(V(a.T.P.Lx, a.T.P.Ly));
-    DrawRectangleLinesEx({p0.x, p1.y, p1.x - p0.x, p0.y - p1.y}, th, edge);
+  }
+  // bord du tissu
+  for (const auto &e : a.M.boundaryEdges) {
+    DrawLineEx(toScreen(a.M.verts[e.first]), toScreen(a.M.verts[e.second]), 2.0f * th, COL_EDGE);
   }
   if (a.showSeeds) {
-    float r = (float)std::clamp(0.06 * a.zoom, 1.0, 5.0);
+    float r = (float)std::clamp(0.07 * a.zoom, 1.0, 6.0);
     for (size_t i = 0; i < a.T.seeds.size(); i++) {
-      bool b = a.T.isBundle[i];
-      DrawCircleV(toScreen(a.T.seeds[i]), b ? 1.6f * r : r, b ? COL_SEED_B : COL_SEED);
-    }
-  } else if (a.colorField != 0) {
-    // en mode coloré, les bundles restent repérés
-    float r = (float)std::clamp(0.1 * a.zoom, 2.0, 6.0);
-    for (size_t i = 0; i < a.T.seeds.size(); i++) {
-      if (a.T.isBundle[i]) {
-        DrawCircleV(toScreen(a.T.seeds[i]), r, COL_SEED_B);
+      if (a.T.inside(i) && !a.T.isBundle[i]) {
+        DrawCircleV(toScreen(a.T.seeds[i]), r, COL_SEED_RING);
+        DrawCircleV(toScreen(a.T.seeds[i]), 0.7f * r, COL_SEED);
       }
+    }
+  }
+  // les bundles restent toujours repérés
+  float rb = (float)std::clamp(0.22 * a.zoom, 2.0, 16.0);
+  for (size_t i = 0; i < a.T.seeds.size(); i++) {
+    if (a.T.inside(i) && a.T.isBundle[i]) {
+      DrawCircleV(toScreen(a.T.seeds[i]), rb, COL_BUNDLE);
     }
   }
 
   // légende
   const ColorField &f = COLOR_FIELDS[a.colorField];
   float lx = a.view.x + 12, ly = a.view.y + a.view.height - 34;
-  if (f.value && f.discrete) {
+  if (!f.value && a.MT.nBundles > 0) {
+    float bx = a.view.x + a.view.width - 136, by = a.view.y + a.view.height - 44;
+    DrawRectangleRounded({bx, by, 120, 30}, 0.2f, 4, COL_BG);
+    DrawRectangleRoundedLinesEx({bx, by, 120, 30}, 0.2f, 4, 1.5f, COL_EDGE);
+    DrawRectangle((int)bx + 10, (int)by + 9, 28, 13, COL_BUNDLE);
+    uiText("Bundles", bx + 46, by + 5, 18, COL_EDGE);
+  } else if (f.value && f.discrete) {
     DrawRectangle((int)lx - 6, (int)ly - 6, 7 * 34 + 12, 32, ColorAlpha(WHITE, 0.85f));
     for (int n = 3; n <= 9; n++) {
       float x = lx + (n - 3) * 34;
@@ -458,7 +478,10 @@ static std::string hoverInfo() {
   if (w.x < 0 || w.y < 0 || w.x > a.T.P.Lx || w.y > a.T.P.Ly) {
     return TextFormat("x = %.3f   y = %.3f", w.x, w.y);
   }
-  int c = a.T.nearestSeed(w); // cellule de Voronoï contenant w
+  int c = a.T.nearestSeed(w); // cellule de Voronoï contenant w (parmi les cellules du tissu)
+  if (c < 0 || !a.T.domain.inShape(w)) {
+    return TextFormat("x = %.3f   y = %.3f   (hors du tissu)", w.x, w.y);
+  }
   return TextFormat("x = %.3f   y = %.3f   |   cellule %d%s : %d côtés, aire %.4g, SI %.3f", w.x, w.y, c,
                     a.T.isBundle[c] ? " (bundle)" : "", a.D.sides[c], a.D.area[c], a.D.SI[c]);
 }
@@ -488,7 +511,7 @@ static void handleViewInput() {
       // clic sans déplacement : bundle on/off
       if (std::fabs(m.x - a.pressPos.x) + std::fabs(m.y - a.pressPos.y) < 4.0f) {
         V w = toWorld(m);
-        if (w.x > 0 && w.y > 0 && w.x < a.T.P.Lx && w.y < a.T.P.Ly) {
+        if (a.T.domain.contains(w) && a.T.domain.inShape(w) && a.T.nearestSeed(w) >= 0) {
           int i = a.T.toggleBundle(w);
           // bundles imposés (bundle x y) : gardés à la régénération et enregistrés avec les paramètres
           auto &B = a.P.bundleAt;
@@ -565,6 +588,32 @@ static bool paramWidget(Cursor &c, int idx, const ParamSpec &s) {
   float h = (float)cfgFontSize + 6;
   Rectangle line = c.row(h, 2);
   hoverHelp({line.x, line.y, line.width, line.height + h}, s.help);
+  if (s.kind == ParamKind::Text) {
+    // expression : libellé puis champ de saisie sur toute la largeur (Entrée pour valider)
+    GuiLabel({line.x, line.y, line.width, h}, TextFormat("%s%s", s.name, s.reseed ? " *" : ""));
+    Rectangle box = c.row(h, 8);
+    hoverHelp(box, s.help);
+    GuiSetStyle(TEXTBOX, TEXT_ALIGNMENT, TEXT_ALIGN_LEFT);
+    if (a.editing != idx) {
+      static char tmp[512];
+      std::string v = s.text(a.P);
+      std::snprintf(tmp, sizeof(tmp), "%s", v.empty() ? "(rectangle)" : v.c_str());
+      if (GuiTextBox(box, tmp, sizeof(tmp), false)) {
+        a.editing = idx;
+        std::snprintf(a.textBuf, sizeof(a.textBuf), "%s", v.c_str());
+      }
+    } else if (GuiTextBox(box, a.textBuf, sizeof(a.textBuf), true)) {
+      try {
+        s.parse(a.P, a.textBuf);
+        changed = true;
+      } catch (const std::exception &e) {
+        say(e.what(), true);
+      }
+      a.editing = -1;
+    }
+    GuiSetStyle(TEXTBOX, TEXT_ALIGNMENT, TEXT_ALIGN_RIGHT);
+    return changed;
+  }
   GuiLabel({line.x, line.y, line.width - 100, h}, TextFormat("%s%s", s.name, s.reseed ? " *" : ""));
   if (s.kind != ParamKind::Choice) {
     Rectangle box{line.x + line.width - 96, line.y, 96, h};

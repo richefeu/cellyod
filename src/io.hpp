@@ -8,11 +8,12 @@
 //   iteration <n>                   nombre d'itérations de Lloyd effectuées
 //   vertices <N>                    puis N lignes : x y
 //   cells <M>                       puis M lignes : type sx sy nv v0 v1 ... v(nv-1)
+//   frozen <K>                      puis K lignes : sx sy (germes extérieurs à la forme, sans cellule)
 //
 // Les sommets sont partagés entre cellules ; ceux d'une cellule sont donnés dans le sens trigonométrique.
 // L'identifiant d'une cellule est son rang (à partir de 0). type : 0 cellule ordinaire, 1 bundle. (sx, sy) est
-// le germe de la cellule : avec les paramètres, il permet de reprendre les itérations là où elles s'étaient
-// arrêtées (le pavage est entièrement déterminé par les germes).
+// le germe de la cellule : avec les paramètres et les germes extérieurs, il permet de reprendre les itérations là
+// où elles s'étaient arrêtées (le pavage est entièrement déterminé par les germes).
 #pragma once
 
 #include "tissue.hpp"
@@ -26,6 +27,7 @@ Tissue loadCells(const std::string &file);
 struct SvgOptions {
   double widthPx{1000.0};
   bool seeds{true};
+  bool legend{true};
 };
 void writeSVG(const std::string &file, const Tissue &t, const CellMesh &m, const SvgOptions &opt = {});
 

@@ -2,8 +2,8 @@
 CXX      ?= c++
 CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra
 
-CORE_SRC = src/params.cpp src/tissue.cpp src/io.cpp
-CORE_HDR = src/geom.hpp src/params.hpp src/tissue.hpp src/io.hpp
+CORE_SRC = src/params.cpp src/expr.cpp src/tissue.cpp src/io.cpp
+CORE_HDR = src/geom.hpp src/expr.hpp src/params.hpp src/tissue.hpp src/io.hpp
 
 RAYLIB = $(shell pkg-config --cflags --libs raylib)
 ifeq ($(shell uname -s),Darwin)

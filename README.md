@@ -24,6 +24,35 @@ cd examples
 Toutes les grandeurs sont **sans dimension** : l'unité de longueur est le diamètre équivalent visé des cellules.
 Une cellule a donc une aire visée de π/4, et un domaine `Lx × Ly` contient environ `Lx·Ly/(π/4)` cellules.
 
+## Forme du domaine
+
+Les germes remplissent toujours le rectangle `[0, Lx] × [0, Ly]`. Le tissu est la partie de ce rectangle où
+`f(x, y) ≤ 0`, f étant donnée par l'expression `shape` (sans `shape` : tout le rectangle) :
+
+- une cellule coupée par le bord de la forme est réduite à sa partie intérieure ; le bord courbe est suivi
+  finement (points de passage par dichotomie, puis projection sur f = 0) ;
+- une cellule entièrement extérieure est vide et son germe reste **immobile** : les germes extérieurs forment la
+  paroi qui contient le tissu ;
+- une cellule coupée va vers le centroïde c de sa partie intérieure, en
+  p' = (c + α b + w c)/(1 + α + w), avec w = `beta` × (aire extérieure). Avec `beta` grand (défaut 10⁶),
+  elle suit Lloyd sans être attirée par les bundles ; les cellules entièrement intérieures ne sont pas
+  concernées.
+
+Le rectangle doit déborder un peu de la forme (une ou deux cellules) pour qu'il y ait des germes extérieurs.
+
+Expression : opérateurs `+ - * / ^`, parenthèses, fonctions `sin cos tan asin acos atan exp log sqrt abs
+floor ceil` et `atan2(y, x) min(a, b) max(a, b) pow(a, b)`, constantes `pi` et `e`. Variables : `x`, `y`, `r` et
+`t` (rayon et angle en radians depuis le centre du rectangle), `cx`, `cy` (centre), `Lx`, `Ly`. Union de deux
+formes : `min(f1, f2)` ; intersection : `max(f1, f2)` ; différence : `max(f1, -f2)`.
+
+| Forme | `shape` |
+|---|---|
+| disque de rayon 18 | `r - 18` |
+| ellipse de demi-axes 20 et 12 | `((x-cx)/20)^2 + ((y-cy)/12)^2 - 1` |
+| rectangle centré 30 × 16 | `max(abs(x-cx) - 15, abs(y-cy) - 8)` |
+| anneau | `max(r - 18, 8 - r)` |
+| disque échancré (`examples/rein.txt`) | `r - 20 + 4.5*exp(-t^2/0.12)` |
+
 ## Interface graphique
 
 ```bash
@@ -38,9 +67,11 @@ Le tissu évolue en direct, itération par itération. Le panneau de droite cont
 - **Paramètres** : tous les paramètres du registre, avec un curseur et une valeur modifiable au clavier (cliquer
   sur la valeur, Entrée pour valider). Un paramètre marqué `*` régénère les germes ; les autres (`alpha`,
   anisotropie, `bundleMotion`, `lloydIterations`) s'appliquent dès l'itération suivante, sans repartir de zéro.
-  L'aide d'un paramètre s'affiche dans la barre d'état quand la souris le survole ;
-- **Affichage** : coloration uniforme (bundles en vert foncé), par nombre de côtés, par aire ou par indice de
-  forme ; germes et parois ;
+  L'aide d'un paramètre s'affiche dans la barre d'état quand la souris le survole. L'expression `shape` se
+  saisit dans un champ (Entrée pour valider ; une expression invalide est signalée dans la barre d'état) ;
+- **Affichage** : rendu uniforme (cellules sombres, parois blanches, germes gris, bundles en rouge saumon, comme
+  le SVG), ou coloration par nombre de côtés, par aire ou par indice de forme ; germes et parois. Le bord du
+  tissu est tracé en trait épais ;
 - **Métriques** : valeurs courantes ; un clic sur une métrique trace son évolution en fonction de l'itération ;
   histogramme du nombre de côtés ;
 - **Fichiers** : enregistrer le fichier de cellules et son SVG, recharger, exporter les paramètres
@@ -86,6 +117,7 @@ les cellules continuent de se resserrer, et `lloydIterations` est un troisième 
 | référence (amas autour des bundles) | `lattice random`, `bundleFraction 0.05`, `alpha 0.05`, `anisotropy 1` | `examples/tissu.txt` |
 | colonnes | idem avec `anisotropy 1000` | `examples/colonnes.txt` |
 | coupe tomographique | `lattice square`, `disorder 0`, `lloydIterations 5`, `alpha 0.02`, `anisotropy 10000` | `examples/tomographie.txt` |
+| domaine non convexe | référence dans un disque échancré | `examples/rein.txt` |
 
 ## Paramètres
 
@@ -94,7 +126,9 @@ valeur du fichier.
 
 | Mot-clé | Défaut | Description |
 |---|---|---|
-| `Lx`, `Ly` | 40, 40 | dimensions du domaine [0, Lx] × [0, Ly] |
+| `Lx`, `Ly` | 40, 40 | rectangle des germes [0, Lx] × [0, Ly] |
+| `shape` | — | forme du tissu : expression de f(x, y), tissu = { f ≤ 0 } (vide : tout le rectangle) |
+| `beta` | 1e6 | cellules coupées par le bord : poids du centroïde intérieur (grand : pas d'attraction) |
 | `lattice` | hex | état initial : `hex`, `square`, `random` (ou `poisson`), `uniform` |
 | `disorder` | 0.3 | perturbation des germes de `hex` et `square`, en fraction du pas |
 | `seed` | 1 | graine du générateur aléatoire |
@@ -121,12 +155,14 @@ domain xmin ymin xmax ymax
 iteration <n>                   nombre d'itérations effectuées
 vertices <N>                    puis N lignes : x y
 cells <M>                       puis M lignes : type sx sy nv v0 v1 ... v(nv-1)
+frozen <K>                      puis K lignes : sx sy (germes extérieurs à la forme, sans cellule)
 ```
 
 Les sommets sont partagés entre cellules. Ceux d'une cellule sont donnés dans le sens trigonométrique. L'identifiant
 d'une cellule est son rang, à partir de 0. `type` vaut 0 pour une cellule ordinaire et 1 pour un bundle.
-`(sx, sy)` est le germe de la cellule : avec les paramètres, il suffit à reconstruire le pavage, ce qui permet
-de reprendre les itérations (`-load`).
+`(sx, sy)` est le germe de la cellule : avec les paramètres et les germes extérieurs (section `frozen`, absente
+sans forme), il suffit à reconstruire le pavage, ce qui permet de reprendre les itérations (`-load`) : les germes
+obtenus sont identiques à ceux d'un calcul d'une traite.
 
 ## Métriques
 
@@ -147,8 +183,9 @@ bords compris :
 | Fichier | Rôle |
 |---|---|
 | `src/geom.hpp` | vecteurs, polygones (aire, centroïde) |
+| `src/expr.hpp/.cpp` | expressions numériques (forme du domaine) |
 | `src/params.hpp/.cpp` | paramètres et leur registre (`paramSpecs()`) |
-| `src/tissue.hpp/.cpp` | domaine, germes, Voronoï, itérations, sommets partagés, métriques |
+| `src/tissue.hpp/.cpp` | domaine et découpe par la forme, germes, Voronoï, itérations, sommets partagés, métriques |
 | `src/io.hpp/.cpp` | fichier de cellules, SVG, fichier `morphology` |
 | `src/cli.cpp` | ligne de commande |
 | `gui/cellyod_gui.cpp` | interface raylib/raygui |
@@ -159,4 +196,4 @@ faut régénérer les germes après une modification. La lecture des paramètres
 dans `paramSpecs()`**. De même, `Metrics::items()` liste les métriques (affichage, courbe, fichier
 `morphology`) et `COLOR_FIELDS` (`gui/cellyod_gui.cpp`) les champs de coloration des cellules.
 
-La forme du domaine est isolée dans la structure `Domain` (`src/tissue.hpp`), pour l'instant un rectangle.
+Tout ce qui dépend de la forme du domaine est regroupé dans la structure `Domain` (`src/tissue.hpp`).

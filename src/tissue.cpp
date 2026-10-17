@@ -1,4 +1,5 @@
 #include "tissue.hpp"
+#include "expr.hpp"
 
 #include <algorithm>
 #include <random>
@@ -57,10 +58,17 @@ Polygon clipHalfPlane(const Polygon &poly, const V &p, const V &q) {
 
 // Voronoï par découpe de demi-plans : chaque cellule part du domaine (convexe) et est découpée par les germes
 // de couronnes de cases croissantes, jusqu'à ce qu'aucun germe plus lointain ne puisse plus la couper.
-std::vector<Polygon> voronoi(const std::vector<V> &seeds, const Domain &D, double h) {
+std::vector<Polygon> voronoiCells(const std::vector<V> &seeds, const Domain &D, double h) {
   SeedGrid g(D.Lx, D.Ly, h);
   for (size_t i = 0; i < seeds.size(); i++) {
     g.add((int)i, seeds[i]);
+  }
+  // germes de chaque case triés par position : le résultat (arrondis compris) ne dépend pas de leur numérotation,
+  // ce qui permet de reprendre exactement un calcul enregistré (germes extérieurs placés à la fin du fichier)
+  for (auto &bucket : g.b) {
+    std::sort(bucket.begin(), bucket.end(), [&](int i, int j) {
+      return seeds[i].x < seeds[j].x || (seeds[i].x == seeds[j].x && seeds[i].y < seeds[j].y);
+    });
   }
   const Polygon dom = D.polygon();
   std::vector<Polygon> cells(seeds.size());
@@ -107,6 +115,125 @@ int nearestBundle(const V &q, const std::vector<V> &seeds, const std::vector<int
 
 } // namespace
 
+// ================================================================================================
+// Domaine : rectangle des germes et forme { f <= 0 }
+// ================================================================================================
+
+Domain::Domain(const Params &p) : Lx(p.Lx), Ly(p.Ly) {
+  if (!p.shape.empty()) {
+    shape = std::make_shared<const Expr>(p.shape, shapeVariables());
+  }
+}
+
+double Domain::f(const V &q) const {
+  if (!shape) {
+    return -1.0;
+  }
+  const double cx = 0.5 * Lx, cy = 0.5 * Ly, dx = q.x - cx, dy = q.y - cy;
+  const double v[8] = {q.x, q.y, std::sqrt(dx * dx + dy * dy), std::atan2(dy, dx), cx, cy, Lx, Ly};
+  return shape->eval(v);
+}
+
+// Le contour de la cellule est échantillonné au pas h ; les points de passage du bord de la forme sont trouvés par
+// dichotomie. Entre une sortie et l'entrée suivante, le bord de la forme est suivi : des points de la corde sont
+// projetés sur f = 0 (méthode de Newton). Les points de passage situés sur une paroi commune à deux cellules sont
+// calculés de la même façon des deux côtés : ils deviennent des sommets partagés.
+Polygon Domain::clip(const Polygon &poly, double h, bool &cut) const {
+  cut = false;
+  if (!shape || poly.size() < 3) {
+    return poly;
+  }
+  struct Sample {
+    V p;
+    double f;
+    bool vertex;
+  };
+  std::vector<Sample> s;
+  for (size_t i = 0; i < poly.size(); i++) {
+    const V &A = poly[i], &B = poly[(i + 1) % poly.size()];
+    int n = std::max(1, (int)std::ceil(norm(B - A) / h));
+    for (int k = 0; k < n; k++) {
+      V p = A + (B - A) * ((double)k / n);
+      s.push_back({p, f(p), k == 0});
+    }
+  }
+  const size_t n = s.size();
+  int start = -1;
+  bool anyOut = false;
+  for (size_t i = 0; i < n; i++) {
+    if (s[i].f <= 0.0) {
+      start = start < 0 ? (int)i : start;
+    } else {
+      anyOut = true;
+    }
+  }
+  if (!anyOut) {
+    return poly;
+  }
+  cut = true;
+  if (start < 0) {
+    return {};
+  }
+  // point du bord entre a (intérieur) et b (extérieur)
+  auto root = [&](V a, V b) {
+    for (int it = 0; it < 60; it++) {
+      V m = (a + b) * 0.5;
+      (f(m) <= 0.0 ? a : b) = m;
+    }
+    return (a + b) * 0.5;
+  };
+  auto insideCell = [&](const V &q) {
+    for (size_t i = 0; i < poly.size(); i++) {
+      if (cross(poly[(i + 1) % poly.size()] - poly[i], q - poly[i]) < -1e-12 * h * h) {
+        return false;
+      }
+    }
+    return true;
+  };
+  Polygon out;
+  V exitPt;
+  const double eps = 1e-6 * h;
+  for (size_t k = 0; k < n; k++) {
+    const Sample &a = s[(start + k) % n], &b = s[(start + k + 1) % n];
+    bool inA = a.f <= 0.0, inB = b.f <= 0.0;
+    if (inA && a.vertex) {
+      out.push_back(a.p);
+    }
+    if (inA && !inB) {
+      exitPt = root(a.p, b.p);
+      out.push_back(exitPt);
+    } else if (!inA && inB) {
+      V entry = root(b.p, a.p);
+      // bord de la forme entre la sortie et cette entrée
+      int m = (int)std::ceil(norm(entry - exitPt) / (0.5 * h)) - 1;
+      for (int j = 1; j <= m; j++) {
+        V p = exitPt + (entry - exitPt) * ((double)j / (m + 1));
+        for (int it = 0; it < 10; it++) {
+          double fp = f(p);
+          V g((f(p + V(eps, 0)) - f(p - V(eps, 0))) / (2 * eps), (f(p + V(0, eps)) - f(p - V(0, eps))) / (2 * eps));
+          double gg = dot(g, g);
+          if (gg <= 0.0 || !std::isfinite(gg)) {
+            break;
+          }
+          p = p - g * (fp / gg);
+          if (std::fabs(fp) < 1e-12 * h) {
+            break;
+          }
+        }
+        if (insideCell(p)) {
+          out.push_back(p);
+        }
+      }
+      out.push_back(entry);
+    }
+  }
+  return out.size() >= 3 ? out : Polygon();
+}
+
+// ================================================================================================
+// Tissu
+// ================================================================================================
+
 Mahalanobis::Mahalanobis(const Params &p) {
   double th = p.anisotropyAngle * M_PI / 180.0, c = std::cos(th), s = std::sin(th), K = p.anisotropy;
   double sxx = K * c * c + s * s, syy = K * s * s + c * c, sxy = (K - 1.0) * c * s;
@@ -123,11 +250,18 @@ Mahalanobis::Mahalanobis(const Params &p) {
 
 double Tissue::spacing() { return std::sqrt(CELL_AREA); }
 
-size_t Tissue::nBundles() const { return (size_t)std::count(isBundle.begin(), isBundle.end(), 1); }
+size_t Tissue::nBundles() const {
+  size_t n = 0;
+  for (size_t i = 0; i < seeds.size(); i++) {
+    n += isBundle[i] && inside(i);
+  }
+  return n;
+}
 
 void Tissue::init(const Params &p) {
   P = p;
-  const Domain D(P);
+  domain = Domain(P);
+  const Domain &D = domain;
   const double sp = spacing();
   const size_t N = (size_t)std::llround(D.area() / CELL_AREA);
   const double rmin = 0.7 * sp;
@@ -179,16 +313,19 @@ void Tissue::init(const Params &p) {
     }
   }
 
-  // Bundles : une fraction bundleFraction des germes tirés au hasard, plus les germes les plus proches des points
-  // imposés par 'bundle x y'
+  // Bundles : une fraction bundleFraction des germes du tissu tirés au hasard, plus les germes les plus proches
+  // des points imposés par 'bundle x y'
   isBundle.assign(seeds.size(), 0);
+  updateVoronoi();
   if (P.bundleFraction > 0.0) {
-    std::vector<int> idx(seeds.size());
-    for (size_t i = 0; i < idx.size(); i++) {
-      idx[i] = (int)i;
+    std::vector<int> idx;
+    for (size_t i = 0; i < seeds.size(); i++) {
+      if (inside(i)) {
+        idx.push_back((int)i);
+      }
     }
     std::shuffle(idx.begin(), idx.end(), rng);
-    size_t nb = std::min(idx.size(), (size_t)std::llround(P.bundleFraction * (double)seeds.size()));
+    size_t nb = std::min(idx.size(), (size_t)std::llround(P.bundleFraction * (double)idx.size()));
     for (size_t i = 0; i < nb; i++) {
       isBundle[idx[i]] = 1;
     }
@@ -201,11 +338,11 @@ void Tissue::init(const Params &p) {
   }
   iteration = 0;
   lastMove = 0.0;
-  updateVoronoi();
 }
 
 void Tissue::restore(const Params &p, std::vector<V> s, std::vector<char> bundle, int it) {
   P = p;
+  domain = Domain(P);
   seeds = std::move(s);
   isBundle = std::move(bundle);
   isBundle.resize(seeds.size(), 0);
@@ -214,33 +351,54 @@ void Tissue::restore(const Params &p, std::vector<V> s, std::vector<char> bundle
   updateVoronoi();
 }
 
-void Tissue::updateVoronoi() { cells = voronoi(seeds, Domain(P), spacing()); }
+void Tissue::updateVoronoi() {
+  voronoi = voronoiCells(seeds, domain, spacing());
+  cells.resize(seeds.size());
+  areaOut.assign(seeds.size(), 0.0);
+  for (size_t i = 0; i < seeds.size(); i++) {
+    bool cut = false;
+    cells[i] = domain.clip(voronoi[i], 0.25 * spacing(), cut);
+    if (cut) {
+      areaOut[i] = std::max(0.0, std::fabs(signedArea(voronoi[i])) - std::fabs(signedArea(cells[i])));
+    }
+  }
+}
 
 // Itération de point fixe de l'article : chaque germe ordinaire va au centroïde c de sa cellule, déplacé vers le
 // bundle b le plus proche (Mahalanobis) d'une fraction alpha / (1 + alpha) du segment [c, b]. Les bundles suivent
 // bundleMotion : lloyd (centroïde), fixed (immobiles) ou attract (attirés comme les autres germes, vers le bundle
 // le plus proche autre qu'eux-mêmes). Tous les germes sont mis à jour simultanément, avec les positions des
 // bundles du début de l'itération.
+// Avec une forme, c est le centroïde de la partie intérieure de la cellule et une cellule coupée par le bord va
+// en p' = (c + alpha b + w c) / (1 + alpha + w), w = beta * aire extérieure : avec beta grand, elle suit Lloyd sans
+// être attirée. Les germes extérieurs (cellule vide) restent immobiles.
 void Tissue::step() {
   const Mahalanobis maha(P);
   std::vector<int> bundles;
   for (size_t i = 0; i < seeds.size(); i++) {
-    if (isBundle[i]) {
+    if (isBundle[i] && inside(i)) {
       bundles.push_back((int)i);
     }
   }
   std::vector<V> next = seeds;
   double move = 0.0;
   for (size_t i = 0; i < seeds.size(); i++) {
-    if (isBundle[i] && P.bundleMotion == MOTION_FIXED) {
+    if (!inside(i) || (isBundle[i] && P.bundleMotion == MOTION_FIXED)) {
       continue;
     }
-    V c = cells[i].size() >= 3 ? centroid(cells[i]) : seeds[i];
+    V c = centroid(cells[i]);
     int b = -1;
     if (P.alpha > 0.0 && (!isBundle[i] || P.bundleMotion == MOTION_ATTRACT)) {
       b = nearestBundle(c, seeds, bundles, maha, isBundle[i] ? (int)i : -1);
     }
-    next[i] = (b >= 0) ? (c + seeds[b] * P.alpha) * (1.0 / (1.0 + P.alpha)) : c;
+    const double w = P.beta * areaOut[i];
+    V num = w > 0.0 ? c * (1.0 + w) : c;
+    double den = 1.0 + w;
+    if (b >= 0) {
+      num += seeds[b] * P.alpha;
+      den += P.alpha;
+    }
+    next[i] = den != 1.0 ? num * (1.0 / den) : num;
     move += norm(next[i] - seeds[i]);
   }
   lastMove = seeds.empty() ? 0.0 : move / (double)seeds.size() / spacing();
@@ -259,6 +417,9 @@ int Tissue::nearestSeed(const V &q) const {
   int best = -1;
   double dBest = 1e300;
   for (size_t i = 0; i < seeds.size(); i++) {
+    if (!inside(i)) {
+      continue;
+    }
     double d = norm(seeds[i] - q);
     if (d < dBest) {
       dBest = d;
@@ -280,7 +441,6 @@ int Tissue::toggleBundle(const V &q) {
 CellMesh Tissue::mesh() const {
   const double sp = spacing();
   const double tolV = 1e-8 * sp, hb = 1e-6 * sp;
-  const Domain D(P);
   CellMesh m;
   std::unordered_map<long long, std::vector<int>> hash;
   auto key = [](long long i, long long j) { return i * 1000003LL + j; };
@@ -315,12 +475,30 @@ CellMesh Tissue::mesh() const {
     while (ids.size() > 1 && ids.front() == ids.back()) {
       ids.pop_back();
     }
-    bool bnd = false;
-    for (int v : ids) {
-      bnd = bnd || D.onBoundary(m.verts[v], 1e-6 * sp);
+    if (ids.size() < 3) {
+      ids.clear();
     }
     m.cells.push_back(ids);
-    m.boundary.push_back(bnd);
+  }
+  // Bord du tissu : parois qui n'appartiennent qu'à une cellule
+  std::unordered_map<long long, int> uses;
+  const long long nv = (long long)m.verts.size();
+  auto edgeKey = [&](int a, int b) { return (long long)std::min(a, b) * nv + std::max(a, b); };
+  for (const auto &ids : m.cells) {
+    for (size_t k = 0; k < ids.size(); k++) {
+      uses[edgeKey(ids[k], ids[(k + 1) % ids.size()])]++;
+    }
+  }
+  m.boundary.assign(m.cells.size(), 0);
+  for (size_t c = 0; c < m.cells.size(); c++) {
+    const auto &ids = m.cells[c];
+    for (size_t k = 0; k < ids.size(); k++) {
+      int a = ids[k], b = ids[(k + 1) % ids.size()];
+      if (uses[edgeKey(a, b)] == 1) {
+        m.boundary[c] = 1;
+        m.boundaryEdges.emplace_back(a, b);
+      }
+    }
   }
   return m;
 }
@@ -404,7 +582,7 @@ Metrics computeMetrics(const Tissue &t, const CellMesh &m) {
       nInner++;
     }
   }
-  r.nCells = nc;
+  r.nCells = all.n;
   r.nBundles = t.nBundles();
   r.meanSI = all.mean(all.SI);
   double mA = all.mean(all.A);
