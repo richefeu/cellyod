@@ -203,10 +203,14 @@ void setParam(Params &p, const std::string &key, const std::string &value) {
       throw std::runtime_error("svgTheme : light (noir sur blanc) ou dark (blanc sur noir) attendu");
     }
     p.svgDark = v == "dark";
-  } else if (key == "output" || key == "svg" || key == "morphology") {
+  } else if (key == "output" || key == "svg" || key == "morphology" || key == "polygons") {
     std::string v;
     is >> v;
-    (key == "output" ? p.output : key == "svg" ? p.svg : p.morphology) = v;
+    (key == "output" ? p.output : key == "svg" ? p.svg : key == "morphology" ? p.morphology : p.polygons) = v;
+  } else if (key == "polygonOffset") {
+    if (!(is >> p.polygonOffset) || p.polygonOffset < 0.0) {
+      throw std::runtime_error("polygonOffset : valeur positive attendue");
+    }
   } else if (const ParamSpec *s = findParam(key)) {
     s->parse(p, value);
   } else {
@@ -281,5 +285,7 @@ void printParamHelp(std::ostream &os) {
         "  svg fichier (défaut cells.svg)\n      vue SVG produite (none : pas de SVG)\n"
         "  svgSeeds 0|1, svgBundles 0|1 (défaut 1)\n      SVG : afficher les germes, les bundles\n"
         "  svgTheme light|dark (défaut light)\n      SVG : noir sur blanc ou blanc sur noir\n"
-        "  morphology fichier\n      ajoute une ligne de métriques morphologiques au fichier\n";
+        "  morphology fichier\n      ajoute une ligne de métriques morphologiques au fichier\n"
+        "  polygons fichier\n      export un polygone par cellule (sommets non partagés)\n"
+        "  polygonOffset d (défaut 0)\n      décalage des parois vers l'intérieur pour cet export (voisines à 2d)\n";
 }

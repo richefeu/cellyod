@@ -178,6 +178,8 @@ struct App {
   char svgFile[256]{"cells.svg"};
   char pngFile[256]{"cells.png"};
   char paramsFile[256]{"cells_params.txt"};
+  char polyFile[256]{"cells_polygons.txt"};
+  char polyOffset[32]{"0"}; // décalage des parois (export des polygones)
   bool svgSeeds{true}, svgBundles{true}, svgDark{false};
   int svgWidth{1000};
   std::string capturePending; // capture PNG de la vue à faire à la prochaine image
@@ -189,7 +191,8 @@ struct App {
 static App app;
 
 enum { POPUP_NONE = 0, POPUP_FILES, POPUP_PREFS, POPUP_HELP };
-enum { EDIT_FILE = -2, EDIT_SVG = -3, EDIT_SVG_WIDTH = -4, EDIT_PNG = -5, EDIT_PARAMS = -6 };
+enum { EDIT_FILE = -2, EDIT_SVG = -3, EDIT_SVG_WIDTH = -4, EDIT_PNG = -5, EDIT_PARAMS = -6, EDIT_POLY = -7,
+       EDIT_POLY_OFFSET = -8 };
 
 // Couleur du thème de rendu courant (0xRRGGBB, cf. theme.hpp)
 static Color col(uint32_t rgb, float alpha = 1.0f) {
@@ -393,6 +396,27 @@ static void exportParams(const std::string &f) {
   say("Paramètres exportés : " + f);
 }
 
+// Un polygone par cellule, parois décalées vers l'intérieur
+static void exportPolygons(const std::string &f, const char *offsetText) {
+  App &a = app;
+  char *end = nullptr;
+  double d = std::strtod(offsetText, &end);
+  if (end == offsetText || d < 0.0) {
+    say("décalage invalide : « " + std::string(offsetText) + " » (valeur positive attendue)", true);
+    return;
+  }
+  try {
+    if (a.dirty) {
+      refresh();
+    }
+    size_t lost = savePolygons(f, a.T, a.M, d);
+    say("Polygones exportés : " + f +
+        (lost ? " (" + std::to_string(lost) + " cellule(s) trop petite(s) pour le décalage, nv = 0)" : ""));
+  } catch (const std::exception &e) {
+    say(e.what(), true);
+  }
+}
+
 // Noms par défaut des exports, déduits du fichier de cellules
 static void defaultExportNames() {
   App &a = app;
@@ -400,6 +424,7 @@ static void defaultExportNames() {
   std::snprintf(a.svgFile, sizeof(a.svgFile), "%s.svg", st.c_str());
   std::snprintf(a.pngFile, sizeof(a.pngFile), "%s.png", st.c_str());
   std::snprintf(a.paramsFile, sizeof(a.paramsFile), "%s_params.txt", st.c_str());
+  std::snprintf(a.polyFile, sizeof(a.polyFile), "%s_polygons.txt", st.c_str());
 }
 
 static void openPopup(int p) {
@@ -1002,7 +1027,7 @@ static void popupTitle(Cursor &c, const char *t) {
 static void drawFilesPopup() {
   App &a = app;
   Rectangle r;
-  if (!popupFrame(r, "Fichiers et exports", 560, 470)) {
+  if (!popupFrame(r, "Fichiers et exports", 560, 590)) {
     return;
   }
   float bh = (float)cfgFontSize + 8;
@@ -1048,6 +1073,18 @@ static void drawFilesPopup() {
     a.capturePending = a.pngFile;
     a.popup = POPUP_NONE; // capture à la prochaine image, sans la fenêtre
     a.editing = -1;
+  }
+
+  popupTitle(c, "Polygones : un par cellule, sommets non partagés");
+  textField(c.row(bh), a.polyFile, sizeof(a.polyFile), EDIT_POLY);
+  {
+    Rectangle o = c.row(bh);
+    GuiLabel({o.x, o.y, 300, bh}, "Décalage des parois vers l'intérieur");
+    textField({o.x + o.width - 100, o.y, 100, bh}, a.polyOffset, sizeof(a.polyOffset), EDIT_POLY_OFFSET);
+  }
+  muted(c, "Deux cellules voisines sont alors à 2 x décalage l'une de l'autre.");
+  if (GuiButton(c.row(bh), "Exporter les polygones")) {
+    exportPolygons(a.polyFile, a.polyOffset);
   }
 
   popupTitle(c, "Paramètres (relisibles par cellyod et cellyod-gui)");
@@ -1163,6 +1200,8 @@ static void loadConfig() {
   app.svgBundles = rini_get_value_fallback(ini, "svg_bundles", app.svgBundles) != 0;
   app.showBundles = rini_get_value_fallback(ini, "show_bundles", app.showBundles) != 0;
   app.svgWidth = rini_get_value_fallback(ini, "svg_width", app.svgWidth);
+  std::snprintf(app.polyOffset, sizeof(app.polyOffset), "%s",
+                rini_get_value_text_fallback(ini, "polygon_offset", app.polyOffset));
   for (const std::string &id : foldIds()) {
     app.folded[id] = rini_get_value_fallback(ini, ("fold_" + id).c_str(), 0) != 0;
   }
@@ -1185,6 +1224,7 @@ static void saveConfig() {
   rini_set_value(&ini, "svg_bundles", app.svgBundles, "Export SVG : bundles (0/1)");
   rini_set_value(&ini, "show_bundles", app.showBundles, "Afficher les bundles (0/1)");
   rini_set_value(&ini, "svg_width", app.svgWidth, "Export SVG : largeur (px)");
+  rini_set_value_text(&ini, "polygon_offset", app.polyOffset, "Export des polygones : décalage des parois");
   for (const std::string &id : foldIds()) {
     rini_set_value(&ini, ("fold_" + id).c_str(), app.folded[id], "Section repliée (0/1)");
   }

@@ -543,8 +543,43 @@ le bord du tissu. Exemple (réseau hexagonal $6\times6$, début du fichier) :
 
 \paragraph{Lire le fichier.} Pour un autre programme : lire les lignes \code{param} si besoin, puis $N$ couples
 $(x,y)$ après \code{vertices}, puis $M$ lignes après \code{cells} dont on garde \code{type} et la liste de sommets.
-Une représentation « un polygone par cellule » s'en déduit directement (une option d'export dans ce sens est
-prévue).
+Pour une représentation « un polygone par cellule », utiliser plutôt l'export de la section~\ref{sec:polygones}.
+
+\subsection{Un polygone par cellule, parois décalées}\label{sec:polygones}
+
+Certains codes (éléments discrets, cellules à parois épaisses) attendent un polygone indépendant par cellule, et
+souvent des cellules voisines séparées d'un petit écart. \code{polygons fichier} (ou la fenêtre \emph{Fichiers} de
+l'interface) écrit chaque cellule du tissu avec ses propres sommets, ses parois décalées de
+$d=\text{\code{polygonOffset}}$ (défaut 0) vers l'intérieur :
+\begin{lstlisting}
+cellyod-polygons 1
+offset <d>
+cells <M>          puis M lignes : id type nv x0 y0 x1 y1 ...   (sens trigonométrique)
+\end{lstlisting}
+\code{id} et \code{type} sont ceux du fichier de cellules. Deux cellules voisines sont alors à $2d$ l'une de l'autre ;
+avec $d=0$, les polygones sont exactement les cellules du pavage.
+\begin{lstlisting}
+./cellyod examples/rein.txt polygons=rein_polygons.txt polygonOffset=0.02
+\end{lstlisting}
+
+\textbf{Calcul du décalage.} Chaque côté recule de $d$ parallèlement à lui-même. Pour une cellule convexe (toutes
+les cellules intérieures), le polygone décalé est l'intersection des demi-plans
+$\{\vect x : (\vect b-\vect a)\times(\vect x-\vect a)/\|\vect b-\vect a\|\ge d\}$ de ses côtés $[\vect a,\vect b]$,
+calculée par découpes successives : c'est exact, et un côté trop court pour le décalage disparaît de lui-même (le
+nombre de côtés peut diminuer). Une cellule coupée par un bord concave de la forme peut être non convexe : chaque
+côté devient alors une droite décalée, les sommets sont les intersections des droites consécutives, et un côté qui
+se retourne est supprimé avant de recalculer les sommets. Une cellule dont le rayon inscrit est inférieur à $d$
+disparaît : elle est écrite avec \code{nv = 0} et signalée. Sur les exemples, la distance de chaque polygone
+décalé à son contour d'origine vaut $d$ à $10^{-14}$ près, cellules non convexes comprises
+(figure~\ref{fig:offset}).
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.45\linewidth]{figures/offset_zoom.png}
+  \caption{Polygones décalés de $d=0.1$ (en bleu) sur le pavage d'origine (en gris), au bord concave de
+    \code{examples/rein.txt}.}
+  \label{fig:offset}
+\end{figure}
 
 \subsection{Reprise d'un calcul}\label{sec:reprise}
 
@@ -618,7 +653,8 @@ fermer).
   \item \emph{Fichiers\dots} (touche E, figure~\ref{fig:guifiles}) : nom du fichier de cellules, \emph{Enregistrer les
     cellules} et \emph{Charger} (fichier de cellules ou de paramètres ; un fichier peut aussi être glissé-déposé
     dans la fenêtre) ; export SVG avec son nom, l'affichage des germes et des bundles, la largeur en pixels et le
-    thème (initialisé à celui de la vue) ; capture PNG de la vue telle qu'affichée ; export des paramètres. Les noms
+    thème (initialisé à celui de la vue) ; capture PNG de la vue telle qu'affichée ; export un polygone par cellule
+    avec le décalage des parois (section~\ref{sec:polygones}) ; export des paramètres. Les noms
     d'export sont déduits du fichier de cellules à l'ouverture de la fenêtre. Ctrl+S enregistre directement le
     fichier de cellules et le SVG de même nom, au thème de la vue ;
   \item \emph{Préférences\dots} : taille de police et largeur du panneau ;
@@ -725,8 +761,7 @@ dans un fichier, image binaire\dots) se branche en remplaçant l'évaluation de 
 reconformation) : mêmes nombres de cellules et mêmes métriques pour les quatre états initiaux, avec ou sans
 bundles et anisotropie. Les reprises (\code{-load}) sont vérifiées identiques au bit près.
 
-\textbf{Pistes.} Export « un polygone par cellule » ; décalage des parois (épaisseur) pour les codes
-d'éléments discrets ; forme lue dans un fichier (polygone, image) ; métriques par région ; parallélisation du
+\textbf{Pistes.} Forme lue dans un fichier (polygone, image) ; métriques par région ; parallélisation du
 calcul de Voronoï (chaque cellule est indépendante).
 
 \end{document}

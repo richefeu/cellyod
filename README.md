@@ -89,7 +89,8 @@ Les actions moins fréquentes sont dans des **fenêtres surgissantes**, ouvertes
 panneau (Échap pour fermer) :
 
 - **Fichiers...** (touche E) : enregistrer ou charger un fichier de cellules (ou de paramètres) ; exporter le SVG
-  (nom, germes, bundles, largeur en pixels, thème) ; capturer la vue en PNG ; exporter les paramètres
+  (nom, germes, bundles, largeur en pixels, thème) ; capturer la vue en PNG ; exporter un polygone par cellule
+  avec décalage des parois ; exporter les paramètres
   (`<nom>_params.txt`, relisible par `cellyod`). Un fichier de cellules ou de paramètres peut aussi être
   glissé-déposé dans la fenêtre ;
 - **Préférences...** : taille de police, largeur du panneau ;
@@ -162,6 +163,8 @@ valeur du fichier.
 | `svg` | cells.svg | vue SVG (`none` : pas de SVG) |
 | `svgSeeds`, `svgBundles` | 1, 1 | SVG : afficher les germes, les bundles |
 | `svgTheme` | light | SVG : `light` (noir sur blanc) ou `dark` (blanc sur noir) |
+| `polygons` | — | export un polygone par cellule (voir ci-dessous) |
+| `polygonOffset` | 0 | décalage des parois vers l'intérieur pour cet export |
 | `morphology` | — | ajoute une ligne de paramètres et de métriques au fichier (balayages) |
 
 Σ = K a aᵀ + b bᵀ, avec a la direction des colonnes et b sa perpendiculaire. Toute matrice définie positive
@@ -184,6 +187,26 @@ d'une cellule est son rang, à partir de 0. `type` vaut 0 pour une cellule ordin
 `(sx, sy)` est le germe de la cellule : avec les paramètres et les germes extérieurs (section `frozen`, absente
 sans forme), il suffit à reconstruire le pavage, ce qui permet de reprendre les itérations (`-load`) : les germes
 obtenus sont identiques à ceux d'un calcul d'une traite.
+
+## Export un polygone par cellule
+
+`polygons fichier` (ou la fenêtre *Fichiers* de l'interface) écrit chaque cellule comme un polygone indépendant,
+sans sommets partagés, avec ses parois décalées de `polygonOffset` vers l'intérieur : deux cellules voisines sont
+alors à `2 × polygonOffset` l'une de l'autre (avec 0, ce sont exactement les cellules du pavage).
+
+```
+cellyod-polygons 1
+offset <d>
+cells <M>                       puis M lignes : id type nv x0 y0 x1 y1 ... (sens trigonométrique)
+```
+
+`id` et `type` sont ceux du fichier de cellules. Le décalage est exact : chaque côté recule de d parallèlement à
+lui-même, et un côté trop court pour le décalage disparaît. Une cellule trop petite pour le décalage (rayon
+inscrit inférieur à d) est écrite avec `nv = 0` et signalée.
+
+```bash
+./cellyod examples/rein.txt polygons=rein_polygons.txt polygonOffset=0.02
+```
 
 ## Métriques
 

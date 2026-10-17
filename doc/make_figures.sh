@@ -2,6 +2,7 @@
 # Régénère les figures et les données du tutoriel (nécessite inkscape et ImageMagick).
 # Usage : cd doc && ./make_figures.sh && latexmk -pdf tutorial_cellyod.tex
 set -e
+export LC_ALL=C # nombres avec un point décimal (awk)
 cd "$(dirname "$0")"
 C=../cellyod
 mkdir -p figures work
@@ -54,11 +55,27 @@ magick figures/rein.png -crop 300x300+890+450 +repage figures/rein_zoom.png
 W=600 fig rein_beta0 Lx=46 Ly=46 "shape=r - 20 + 4.5*exp(-t^2/0.12)" beta=0 lattice=random bundleFraction=0.05 \
   alpha=0.05 lloydIterations=50 svgSeeds=0
 
+# zoom sur les polygones décalés (d = 0.1) au bord concave, tracés sur le pavage d'origine
+for d in 0 0.1; do
+  $C ../examples/rein.txt output=/dev/null svg=none polygons=work/poly_$d.txt polygonOffset=$d > /dev/null
+done
+poly_svg() { # fichier, couleur de remplissage, couleur de trait
+  awk -v fill="$2" -v stroke="$3" -v x0=34 -v y1=28 -v s=80 '
+    $1 ~ /^[0-9]+$/ && NF > 3 { printf "<polygon fill=\"%s\" stroke=\"%s\" stroke-width=\"1.2\" points=\"", fill, stroke
+      for (k = 0; k < $3; k++) printf "%.1f,%.1f ", ($(4+2*k) - x0) * s, (y1 - $(5+2*k)) * s
+      print "\"/>" }' "$1"
+}
+{ echo '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="800"><rect width="100%" height="100%" fill="white"/>'
+  poly_svg work/poly_0.txt none "#bbbbbb"
+  poly_svg work/poly_0.1.txt "#dde8f5" "#1a1a1a"
+  echo '</svg>'; } > work/offset_zoom.svg
+png work/offset_zoom.svg figures/offset_zoom.png 640
+
 # 6. Interface graphique (capture)
 ( cd work && rm -f cellyod-gui.ini && ../../cellyod-gui ../../examples/rein.txt --screenshot gui.png )
 cp work/gui.png figures/gui.png
 ( cd work && ../../cellyod-gui ../../examples/tissu.txt --popup files --screenshot gui_files.png )
-magick work/gui_files.png -crop 600x500+340+160 +repage figures/gui_files.png
+magick work/gui_files.png -crop 600x630+340+100 +repage figures/gui_files.png
 
 # 7. Données : métriques en fonction des itérations et de alpha (pgfplots)
 hdr() { sed -e '1s/^# //' "$1" > "$2"; }

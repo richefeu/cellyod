@@ -63,6 +63,10 @@ int main(int argc, char *argv[]) {
     if (!P.morphology.empty()) {
       appendMorphology(P.morphology, t, mt);
     }
+    size_t lost = 0;
+    if (!P.polygons.empty()) {
+      lost = savePolygons(P.polygons, t, m, P.polygonOffset);
+    }
 
     std::cout << std::setprecision(4);
     std::cout << "cellyod : " << mt.nCells << " cellules (" << mt.nBundles << " bundles), " << m.verts.size()
@@ -84,7 +88,12 @@ int main(int argc, char *argv[]) {
       }
     }
     std::cout << "\n  -> " << P.output << (P.svg.empty() || P.svg == "none" ? "" : ", " + P.svg)
-              << (P.morphology.empty() ? "" : ", " + P.morphology) << "\n";
+              << (P.morphology.empty() ? "" : ", " + P.morphology) << (P.polygons.empty() ? "" : ", " + P.polygons)
+              << "\n";
+    if (lost) {
+      std::cout << "  ATTENTION : " << lost << " cellule(s) trop petite(s) pour le décalage " << P.polygonOffset
+                << " (nv = 0 dans " << P.polygons << ")\n";
+    }
   } catch (const std::exception &e) {
     std::cerr << "cellyod : " << e.what() << "\n";
     return 1;

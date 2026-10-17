@@ -1,4 +1,4 @@
-// Entrées/sorties : fichier de cellules (format cellyod), SVG, fichier de métriques.
+// Entrées/sorties : fichier de cellules (format cellyod), polygones, SVG, fichier de métriques.
 //
 // Format de cellules (texte, # pour les commentaires) :
 //
@@ -32,6 +32,17 @@ struct SvgOptions {
   bool dark{false}; // blanc sur noir (défaut : noir sur blanc), cf. theme.hpp
 };
 void writeSVG(const std::string &file, const Tissue &t, const CellMesh &m, const SvgOptions &opt = {});
+
+// Un polygone par cellule (sommets non partagés), parois décalées de offset vers l'intérieur : deux cellules
+// voisines sont alors à 2 offset l'une de l'autre. Format (texte, # pour les commentaires) :
+//
+//   cellyod-polygons 1
+//   offset <d>
+//   cells <M>          puis M lignes : id type nv x0 y0 x1 y1 ... (sens trigonométrique)
+//
+// id et type sont ceux du fichier de cellules. Une cellule trop petite pour le décalage est écrite avec nv = 0.
+// Renvoie le nombre de cellules disparues.
+size_t savePolygons(const std::string &file, const Tissue &t, const CellMesh &m, double offset);
 
 // Ajoute une ligne de paramètres et de métriques (en-tête écrit si le fichier est nouveau)
 void appendMorphology(const std::string &file, const Tissue &t, const Metrics &mt);

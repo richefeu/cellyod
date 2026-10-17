@@ -1,5 +1,6 @@
 #include "io.hpp"
 
+#include <algorithm>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -43,6 +44,43 @@ void saveCells(const std::string &file, const Tissue &t, const CellMesh &m) {
       }
     }
   }
+}
+
+size_t savePolygons(const std::string &file, const Tissue &t, const CellMesh &m, double offset) {
+  std::ofstream os(file);
+  if (!os) {
+    throw std::runtime_error("impossible d'écrire " + file);
+  }
+  os.precision(17);
+  size_t nIn = 0, lost = 0;
+  for (const auto &ids : m.cells) {
+    nIn += !ids.empty();
+  }
+  os << "# cellyod : un polygone par cellule, parois décalées de offset vers l'intérieur\n"
+     << "# (deux cellules voisines sont à 2 offset l'une de l'autre)\n"
+     << "# colonnes : id type nv x0 y0 x1 y1 ... (sommets dans le sens trigonométrique ; type 1 : bundle)\n"
+     << "cellyod-polygons 1\noffset " << offset << "\ncells " << nIn << '\n';
+  size_t id = 0;
+  for (size_t c = 0; c < m.cells.size(); c++) {
+    if (m.cells[c].empty()) {
+      continue;
+    }
+    Polygon p;
+    for (int v : m.cells[c]) {
+      p.push_back(m.verts[v]);
+    }
+    if (signedArea(p) < 0.0) {
+      std::reverse(p.begin(), p.end());
+    }
+    Polygon q = insetPolygon(p, offset);
+    lost += q.empty();
+    os << id++ << ' ' << (int)t.isBundle[c] << ' ' << q.size();
+    for (const V &v : q) {
+      os << ' ' << v.x << ' ' << v.y;
+    }
+    os << '\n';
+  }
+  return lost;
 }
 
 Tissue loadCells(const std::string &file) {

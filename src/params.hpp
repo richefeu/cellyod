@@ -42,6 +42,8 @@ struct Params {
   bool svgSeeds{true}, svgBundles{true}; // SVG : germes, bundles (repérés en rouge)
   bool svgDark{false};                  // SVG : blanc sur noir (défaut : noir sur blanc)
   std::string morphology; // fichier auquel une ligne de métriques est ajoutée (balayages)
+  std::string polygons;   // export un polygone par cellule (vide : pas d'export)
+  double polygonOffset{0.0}; // décalage des parois vers l'intérieur pour cet export
 };
 
 enum Lattice { LATTICE_HEX = 0, LATTICE_SQUARE, LATTICE_RANDOM, LATTICE_UNIFORM };
