@@ -19,7 +19,7 @@
 
 #include <string>
 
-void saveCells(const std::string &file, const Tissue &t, const Mesh &m);
+void saveCells(const std::string &file, const Tissue &t, const CellMesh &m);
 // Relit un fichier de cellules et reconstruit le tissu (lève std::runtime_error)
 Tissue loadCells(const std::string &file);
 
@@ -27,7 +27,7 @@ struct SvgOptions {
   double widthPx{1000.0};
   bool seeds{true};
 };
-void writeSVG(const std::string &file, const Tissue &t, const Mesh &m, const SvgOptions &opt = {});
+void writeSVG(const std::string &file, const Tissue &t, const CellMesh &m, const SvgOptions &opt = {});
 
 // Ajoute une ligne de paramètres et de métriques (en-tête écrit si le fichier est nouveau)
 void appendMorphology(const std::string &file, const Tissue &t, const Metrics &mt);

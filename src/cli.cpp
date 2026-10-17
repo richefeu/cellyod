@@ -50,7 +50,7 @@ int main(int argc, char *argv[]) {
     }
     t.run();
 
-    Mesh m = t.mesh();
+    CellMesh m = t.mesh();
     Metrics mt = computeMetrics(t, m);
     saveCells(P.output, t, m);
     if (!P.svg.empty() && P.svg != "none") {

@@ -277,11 +277,11 @@ int Tissue::toggleBundle(const V &q) {
 }
 
 // Sommets partagés : les sommets calculés indépendamment par chaque cellule sont fusionnés à tolérance près
-Mesh Tissue::mesh() const {
+CellMesh Tissue::mesh() const {
   const double sp = spacing();
   const double tolV = 1e-8 * sp, hb = 1e-6 * sp;
   const Domain D(P);
-  Mesh m;
+  CellMesh m;
   std::unordered_map<long long, std::vector<int>> hash;
   auto key = [](long long i, long long j) { return i * 1000003LL + j; };
   for (const auto &poly : cells) {
@@ -325,7 +325,7 @@ Mesh Tissue::mesh() const {
   return m;
 }
 
-Metrics computeMetrics(const Tissue &t, const Mesh &m) {
+Metrics computeMetrics(const Tissue &t, const CellMesh &m) {
   struct Acc {
     size_t n{0};
     double SI{0.0}, A{0.0}, A2{0.0}, dNN{0.0};

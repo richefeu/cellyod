@@ -8,10 +8,12 @@ de Mahalanobis : on obtient alors des tissus végétaux, du pavage hexagonal ré
 organisés en colonnes (modèle de Trivino *et al.*, *A continuous description of plant cellular tissues from
 variational Voronoi morphogenesis*).
 
-C++17, sans dépendance pour le cœur et la ligne de commande. L'interface graphique dépend en plus de raylib.
+C++17, sans dépendance pour le cœur et la ligne de commande. L'interface graphique dépend en plus de raylib
+(`brew install raylib`) ; raygui et rini (single-header) sont fournis dans `gui/`.
 
 ```bash
-make                         # -> cellyod
+make                         # -> cellyod et cellyod-gui
+make cellyod                 # ligne de commande seule (sans raylib)
 cd examples
 ../cellyod tissu.txt         # -> tissu_cells.txt + tissu.svg
 ../cellyod tissu.txt alpha=0.1 "anisotropy=1000 90" svg=none
@@ -21,6 +23,37 @@ cd examples
 
 Toutes les grandeurs sont **sans dimension** : l'unité de longueur est le diamètre équivalent visé des cellules.
 Une cellule a donc une aire visée de π/4, et un domaine `Lx × Ly` contient environ `Lx·Ly/(π/4)` cellules.
+
+## Interface graphique
+
+```bash
+./cellyod-gui                          # paramètres par défaut
+./cellyod-gui examples/tissu.txt       # fichier de paramètres ou de cellules
+```
+
+Le tissu évolue en direct, itération par itération. Le panneau de droite contient :
+
+- **Simulation** : lancer/pause, une itération, régénérer, calcul direct jusqu'à `lloydIterations`, arrêt
+  automatique à `lloydIterations`, nombre d'itérations par image ;
+- **Paramètres** : tous les paramètres du registre, avec un curseur et une valeur modifiable au clavier (cliquer
+  sur la valeur, Entrée pour valider). Un paramètre marqué `*` régénère les germes ; les autres (`alpha`,
+  anisotropie, `bundleMotion`, `lloydIterations`) s'appliquent dès l'itération suivante, sans repartir de zéro.
+  L'aide d'un paramètre s'affiche dans la barre d'état quand la souris le survole ;
+- **Affichage** : coloration uniforme (bundles en vert foncé), par nombre de côtés, par aire ou par indice de
+  forme ; germes et parois ;
+- **Métriques** : valeurs courantes ; un clic sur une métrique trace son évolution en fonction de l'itération ;
+  histogramme du nombre de côtés ;
+- **Fichiers** : enregistrer le fichier de cellules et son SVG, recharger, exporter les paramètres
+  (`<nom>_params.txt`, relisible par `cellyod`). Un fichier de cellules ou de paramètres peut aussi être
+  glissé-déposé dans la fenêtre.
+
+Dans la vue : clic gauche sur une cellule pour en faire un bundle (ou l'inverse), glisser pour déplacer, molette
+pour zoomer. Les bundles ajoutés à la souris sont mémorisés comme bundles imposés (`bundle x y`) : ils sont
+gardés à la régénération et enregistrés avec les paramètres.
+
+Clavier : Espace lancer/pause, S ou → une itération, R régénérer, F recadrer, Ctrl+S enregistrer.
+
+Les réglages d'affichage sont conservés dans `cellyod-gui.ini` (répertoire courant).
 
 ## Algorithme
 
@@ -118,10 +151,12 @@ bords compris :
 | `src/tissue.hpp/.cpp` | domaine, germes, Voronoï, itérations, sommets partagés, métriques |
 | `src/io.hpp/.cpp` | fichier de cellules, SVG, fichier `morphology` |
 | `src/cli.cpp` | ligne de commande |
+| `gui/cellyod_gui.cpp` | interface raylib/raygui |
 
 Le registre `paramSpecs()` décrit chaque paramètre une seule fois : nom, groupe, aide, bornes conseillées, et s'il
 faut régénérer les germes après une modification. La lecture des paramètres, le fichier de cellules, l'aide
 `-h` et le panneau de l'interface en sont déduits : **ajouter un paramètre = un champ dans `Params` + une ligne
-dans `paramSpecs()`**. De même, `Metrics::items()` liste les métriques affichées.
+dans `paramSpecs()`**. De même, `Metrics::items()` liste les métriques (affichage, courbe, fichier
+`morphology`) et `COLOR_FIELDS` (`gui/cellyod_gui.cpp`) les champs de coloration des cellules.
 
 La forme du domaine est isolée dans la structure `Domain` (`src/tissue.hpp`), pour l'instant un rectangle.

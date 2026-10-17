@@ -35,7 +35,7 @@ struct Mahalanobis {
 };
 
 // Pavage à sommets partagés
-struct Mesh {
+struct CellMesh {
   std::vector<V> verts;
   std::vector<std::vector<int>> cells; // sommets de chaque cellule, sens trigonométrique (indice = germe)
   std::vector<char> boundary;          // cellule touchant le bord du domaine
@@ -65,7 +65,7 @@ public:
   // Espacement visé entre germes : côté du carré de même aire qu'une cellule, sqrt(pi/4)
   static double spacing();
   size_t nBundles() const;
-  Mesh mesh() const;
+  CellMesh mesh() const;
 
 private:
   void updateVoronoi();
@@ -89,4 +89,4 @@ struct Metrics {
   std::vector<std::pair<std::string, double>> items() const;
 };
 
-Metrics computeMetrics(const Tissue &t, const Mesh &m);
+Metrics computeMetrics(const Tissue &t, const CellMesh &m);

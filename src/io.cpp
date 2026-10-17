@@ -6,7 +6,7 @@
 #include <sstream>
 #include <stdexcept>
 
-void saveCells(const std::string &file, const Tissue &t, const Mesh &m) {
+void saveCells(const std::string &file, const Tissue &t, const CellMesh &m) {
   std::ofstream os(file);
   if (!os) {
     throw std::runtime_error("impossible d'écrire " + file);
@@ -103,7 +103,7 @@ Tissue loadCells(const std::string &file) {
   return t;
 }
 
-void writeSVG(const std::string &file, const Tissue &t, const Mesh &m, const SvgOptions &opt) {
+void writeSVG(const std::string &file, const Tissue &t, const CellMesh &m, const SvgOptions &opt) {
   std::ofstream os(file);
   if (!os) {
     throw std::runtime_error("impossible d'écrire " + file);
