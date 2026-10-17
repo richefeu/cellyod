@@ -6,7 +6,7 @@ cellyod pave un domaine par un diagramme de Voronoï, régularisé par des itér
 germes peut être des **bundles** (faisceaux vasculaires) qui attirent les autres cellules au sens d'une distance
 de Mahalanobis : on obtient alors des tissus végétaux, du pavage hexagonal régulier aux tissus très hétérogènes
 organisés en colonnes (modèle de Trivino *et al.*, *A continuous description of plant cellular tissues from
-variational Voronoi morphogenesis*).
+variational Voronoi morphogenesis*, en préparation).
 
 C++17, sans dépendance pour le cœur et la ligne de commande. L'interface graphique dépend en plus de raylib
 (`brew install raylib`) ; raygui et rini (single-header) sont fournis dans `gui/`.
