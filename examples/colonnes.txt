@@ -1,0 +1,10 @@
+# cellyod : tissu organisé en colonnes (forte anisotropie de la distance de Mahalanobis)
+Lx 40
+Ly 40
+lattice         random
+lloydIterations 50
+bundleFraction  0.05
+alpha           0.05
+anisotropy      1000 90   # K et orientation des colonnes (degrés depuis l'axe x)
+output          colonnes_cells.txt
+svg             colonnes.svg

@@ -1,0 +1,13 @@
+# cellyod : tissu végétal de référence de l'article (amas de petites cellules autour des bundles)
+# Longueurs en diamètres de cellule : 40 x 40 -> ~2000 cellules
+Lx 40
+Ly 40
+lattice         random
+lloydIterations 50
+seed            1
+bundleFraction  0.05      # 5 % des germes tirés au hasard deviennent des bundles
+alpha           0.05      # p' = (c + alpha b) / (1 + alpha)
+anisotropy      1         # K = 1 : distance euclidienne
+bundleMotion    lloyd
+output          tissu_cells.txt
+svg             tissu.svg

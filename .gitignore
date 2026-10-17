@@ -1,0 +1,18 @@
+# Répertoires de référence (non versionnés)
+nodeGen/
+nodeGenPlantCom/
+example-d-tracker/
+
+# Produits de compilation
+/cellyod
+/cellyod-gui
+*.o
+*.dSYM/
+
+# Sorties
+examples/*.svg
+examples/*_cells.txt
+examples/morphology.txt
+cellyod-gui.ini
+
+.DS_Store

@@ -1,0 +1,11 @@
+# cellyod : variante « coupe tomographique » de l'article (grille carrée exacte, alpha faible, K très grand)
+Lx 40
+Ly 40
+lattice         square
+disorder        0
+lloydIterations 5
+bundleFraction  0.05
+alpha           0.02
+anisotropy      10000
+output          tomographie_cells.txt
+svg             tomographie.svg
