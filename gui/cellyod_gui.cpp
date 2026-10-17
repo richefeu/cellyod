@@ -7,10 +7,14 @@
 // Souris (vue)  : clic gauche = bundle on/off sur la cellule ; glisser (gauche, droit ou milieu) = déplacer ;
 //                 molette = zoom
 // Clavier       : Espace lancer/pause, S ou -> une itération, R régénérer, F recadrer, T thème (noir sur blanc ou
-//                 blanc sur noir, aussi pour le SVG enregistré), Ctrl+S enregistrer
+//                 blanc sur noir, aussi pour le SVG enregistré), Ctrl+S enregistrer, E fichiers et exports, H aide,
+//                 Échap fermer une fenêtre
+// Panneau       : sections repliables (clic sur l'en-tête) ; actions peu fréquentes (fichiers et exports,
+//                 préférences, aide) dans des fenêtres surgissantes ouvertes depuis la barre du haut
 //
 // Usage : cellyod-gui [params.txt | cells.txt]
 //         cellyod-gui [fichier] --screenshot image.png    (calcule, enregistre une capture et quitte)
+//         --popup files|prefs|help                         (fenêtre ouverte au démarrage)
 #include "raylib.h"
 #include "rlgl.h"
 
@@ -30,6 +34,8 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <map>
+#include <fstream>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -161,16 +167,29 @@ struct App {
   // panneau
   Vector2 scroll{};
   float contentH{1000.0f};
-  int editing{-1}; // paramètre en cours de saisie (-1 : aucun ; -2 : nom de fichier)
+  std::map<std::string, bool> folded; // sections et groupes repliés (identifiant -> replié)
+  int popup{0};                       // fenêtre surgissante ouverte (POPUP_*)
+  int editing{-1}; // champ en cours de saisie : indice du paramètre, ou EDIT_* (-1 : aucun)
   char editBuf[128]{};
   char textBuf[512]{}; // saisie d'un paramètre texte (expression de la forme)
   char file[256]{"cells.txt"};
+
+  // exports (fenêtre Fichiers)
+  char svgFile[256]{"cells.svg"};
+  char pngFile[256]{"cells.png"};
+  char paramsFile[256]{"cells_params.txt"};
+  bool svgSeeds{true}, svgLegend{true}, svgDark{false};
+  int svgWidth{1000};
+  std::string capturePending; // capture PNG de la vue à faire à la prochaine image
   std::string message;
   bool messageError{false};
   std::string hoverHelp;
 };
 
 static App app;
+
+enum { POPUP_NONE = 0, POPUP_FILES, POPUP_PREFS, POPUP_HELP };
+enum { EDIT_FILE = -2, EDIT_SVG = -3, EDIT_SVG_WIDTH = -4, EDIT_PNG = -5, EDIT_PARAMS = -6 };
 
 // Couleur du thème de rendu courant (0xRRGGBB, cf. theme.hpp)
 static Color col(uint32_t rgb, float alpha = 1.0f) {
@@ -318,40 +337,78 @@ static std::string stem(const std::string &f) {
   return (p.parent_path() / p.stem()).string();
 }
 
-static void saveAll() {
+static void saveCellsFile() {
   App &a = app;
   try {
-    std::string f = a.file;
-    if (f.empty()) {
-      f = "cells.txt";
-    }
     if (a.dirty) {
       refresh();
     }
+    std::string f = a.file[0] ? a.file : "cells.txt";
     saveCells(f, a.T, a.M);
-    SvgOptions so;
-    so.dark = a.dark;
-    writeSVG(stem(f) + ".svg", a.T, a.M, so);
-    say("Enregistré : " + f + " et " + stem(f) + ".svg");
+    say("Cellules enregistrées : " + f);
   } catch (const std::exception &e) {
     say(e.what(), true);
   }
 }
 
-static void saveParams() {
+static void exportSVG(const std::string &f, bool dark) {
   App &a = app;
-  std::string f = stem(a.file) + "_params.txt";
-  FILE *fp = std::fopen(f.c_str(), "w");
-  if (!fp) {
+  try {
+    if (a.dirty) {
+      refresh();
+    }
+    SvgOptions so;
+    so.widthPx = std::max(100, a.svgWidth);
+    so.seeds = a.svgSeeds;
+    so.legend = a.svgLegend;
+    so.dark = dark;
+    writeSVG(f, a.T, a.M, so);
+    say("SVG exporté : " + f);
+  } catch (const std::exception &e) {
+    say(e.what(), true);
+  }
+}
+
+// Ctrl+S : fichier de cellules et SVG de même nom, au thème de la vue
+static void saveAll() {
+  saveCellsFile();
+  if (!app.messageError) {
+    std::string f = stem(app.file[0] ? app.file : "cells.txt") + ".svg";
+    exportSVG(f, app.dark);
+    if (!app.messageError) {
+      say("Enregistré : " + std::string(app.file) + " et " + f);
+    }
+  }
+}
+
+static void exportParams(const std::string &f) {
+  App &a = app;
+  std::ofstream os(f);
+  if (!os) {
     say("impossible d'écrire " + f, true);
     return;
   }
-  std::ostringstream os;
   os << "# cellyod : paramètres enregistrés par cellyod-gui\n";
   writeParams(os, a.T.P);
-  std::fputs(os.str().c_str(), fp);
-  std::fclose(fp);
-  say("Paramètres enregistrés : " + f);
+  say("Paramètres exportés : " + f);
+}
+
+// Noms par défaut des exports, déduits du fichier de cellules
+static void defaultExportNames() {
+  App &a = app;
+  std::string st = stem(a.file[0] ? a.file : "cells.txt");
+  std::snprintf(a.svgFile, sizeof(a.svgFile), "%s.svg", st.c_str());
+  std::snprintf(a.pngFile, sizeof(a.pngFile), "%s.png", st.c_str());
+  std::snprintf(a.paramsFile, sizeof(a.paramsFile), "%s_params.txt", st.c_str());
+}
+
+static void openPopup(int p) {
+  app.popup = p;
+  app.editing = -1;
+  if (p == POPUP_FILES) {
+    defaultExportNames();
+    app.svgDark = app.dark;
+  }
 }
 
 // ================================================================================================
@@ -549,17 +606,57 @@ struct Cursor {
   }
 };
 
-static void section(Cursor &c, const char *title) {
-  c.y += 8;
-  uiText(title, c.x, c.y, (float)cfgFontSize, COL_ACCENT);
-  c.y += cfgFontSize + 2;
-  DrawLineEx({c.x, c.y}, {c.x + c.w, c.y}, 1.0f, COL_PANEL_EDGE);
-  c.y += 6;
+// Triangle d'une section : pointe à droite (repliée) ou en bas (dépliée)
+// (sommets dans le sens attendu par raylib)
+static void foldMark(float x, float yc, float sz, bool open, Color c) {
+  if (open) {
+    DrawTriangle({x, yc - 0.4f * sz}, {x + 0.5f * sz, yc + 0.5f * sz}, {x + sz, yc - 0.4f * sz}, c);
+  } else {
+    DrawTriangle({x + 0.15f * sz, yc - 0.55f * sz}, {x + 0.15f * sz, yc + 0.55f * sz}, {x + 0.9f * sz, yc}, c);
+  }
+}
+
+// En-tête de section repliable (clic pour replier ou déplier) ; renvoie true si la section est dépliée.
+// sub : groupe de paramètres (en-tête plus discret). clip : partie visible du panneau.
+static bool section(Cursor &c, const std::string &id, const char *title, const Rectangle &clip, bool sub = false) {
+  App &a = app;
+  bool &folded = a.folded[id];
+  float fs = (float)cfgFontSize - (sub ? 1.0f : 0.0f);
+  c.y += sub ? 2 : 8;
+  Rectangle hr{c.x - 4, c.y - 2, c.w + 8, fs + 6};
+  Vector2 m = GetMousePosition();
+  bool hover = a.popup == POPUP_NONE && CheckCollisionPointRec(m, hr) && CheckCollisionPointRec(m, clip);
+  if (hover) {
+    DrawRectangleRec(hr, {238, 243, 249, 255});
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+      folded = !folded;
+    }
+  }
+  Color tc = sub ? COL_MUTED : COL_ACCENT;
+  foldMark(c.x, c.y + 0.5f * fs + 1, 0.55f * fs, !folded, tc);
+  uiText(title, c.x + 0.55f * fs + 8, c.y, fs, tc);
+  c.y += fs + 2;
+  if (!sub) {
+    DrawLineEx({c.x, c.y}, {c.x + c.w, c.y}, 1.0f, COL_PANEL_EDGE);
+    c.y += 6;
+  } else {
+    c.y += 2;
+  }
+  return !folded;
 }
 
 static void muted(Cursor &c, const char *text) {
   uiText(text, c.x, c.y, (float)cfgFontSize - 2, COL_MUTED);
   c.y += cfgFontSize + 2;
+}
+
+// Champ de texte (saisie au clavier, Entrée ou clic ailleurs pour valider)
+static void textField(Rectangle r, char *buf, int size, int id) {
+  GuiSetStyle(TEXTBOX, TEXT_ALIGNMENT, TEXT_ALIGN_LEFT);
+  if (GuiTextBox(r, buf, size, app.editing == id)) {
+    app.editing = app.editing == id ? -1 : id;
+  }
+  GuiSetStyle(TEXTBOX, TEXT_ALIGNMENT, TEXT_ALIGN_RIGHT);
 }
 
 // Arrondit une valeur issue d'un curseur (fichiers de paramètres lisibles)
@@ -731,13 +828,32 @@ static void drawSidesHistogram(Rectangle r) {
   }
 }
 
+// Barre fixe en haut du panneau : actions peu fréquentes, en fenêtres surgissantes
+static float drawToolbar(Rectangle bounds) {
+  float bh = (float)cfgFontSize + 8, h = bh + 12;
+  DrawRectangle((int)bounds.x, 0, (int)bounds.width, (int)h, {247, 248, 250, 255});
+  DrawLineEx({bounds.x, h}, {bounds.x + bounds.width, h}, 1.0f, COL_PANEL_EDGE);
+  float x = bounds.x + 12, w = (bounds.width - 24 - 8) / 3;
+  if (GuiButton({x, 6, w, bh}, "Fichiers...")) {
+    openPopup(POPUP_FILES);
+  }
+  if (GuiButton({x + w + 4, 6, w, bh}, "Préférences...")) {
+    openPopup(POPUP_PREFS);
+  }
+  if (GuiButton({x + 2 * (w + 4), 6, w, bh}, "Aide...")) {
+    openPopup(POPUP_HELP);
+  }
+  return h;
+}
+
 static void drawPanel(float W, float H) {
   App &a = app;
   float pw = (float)cfgPanelW;
-  Rectangle bounds{W - pw, 0, pw, H};
-  DrawRectangleRec(bounds, COL_PANEL);
+  DrawRectangle((int)(W - pw), 0, (int)pw, (int)H, COL_PANEL);
+  float th = drawToolbar({W - pw, 0, pw, H});
+  Rectangle bounds{W - pw, th, pw, H - th};
   DrawLineEx({bounds.x, 0}, {bounds.x, H}, 1.0f, COL_PANEL_EDGE);
-  Rectangle content{bounds.x, 0, pw - 14, a.contentH};
+  Rectangle content{bounds.x, th, pw - 14, a.contentH};
   Rectangle sv{};
   GuiScrollPanel(bounds, nullptr, content, &a.scroll, &sv);
   BeginScissorMode((int)sv.x, (int)sv.y, (int)sv.width, (int)sv.height);
@@ -746,8 +862,7 @@ static void drawPanel(float W, float H) {
   float bh = (float)cfgFontSize + 8;
 
   // --- Simulation
-  section(c, "SIMULATION");
-  {
+  if (section(c, "simulation", "SIMULATION", sv)) {
     Rectangle r = c.row(bh);
     float w = (r.width - 8) / 3;
     if (GuiButton({r.x, r.y, w, bh}, a.playing ? "Pause" : "Lancer")) {
@@ -762,8 +877,7 @@ static void drawPanel(float W, float H) {
       regenerate();
       a.playing = a.P.lloydIterations > 0;
     }
-    Rectangle r2 = c.row(bh);
-    if (GuiButton(r2, "Calcul direct jusqu'à lloydIterations")) {
+    if (GuiButton(c.row(bh), "Calcul direct jusqu'à lloydIterations")) {
       regenerate();
       runToTarget();
     }
@@ -781,27 +895,30 @@ static void drawPanel(float W, float H) {
     a.speed = std::max(1, (int)std::lround(sp));
   }
 
-  // --- Paramètres (registre)
-  section(c, "PARAMÈTRES");
-  muted(c, "* : régénère les germes ; sinon effet immédiat");
-  {
-    const char *group = "";
+  // --- Paramètres (registre), un sous-groupe repliable par groupe
+  if (section(c, "parametres", "PARAMÈTRES", sv)) {
+    muted(c, "* : régénère les germes ; sinon effet immédiat");
     bool changed = false;
     const auto &specs = paramSpecs();
+    bool open = true;
+    const char *group = "";
     for (size_t i = 0; i < specs.size(); i++) {
       if (std::strcmp(group, specs[i].group) != 0) {
         group = specs[i].group;
-        c.y += 2;
-        uiText(group, c.x, c.y, (float)cfgFontSize - 1, COL_MUTED);
-        c.y += cfgFontSize + 2;
+        open = section(c, std::string("groupe_") + group, group, sv, true);
       }
-      changed = paramWidget(c, (int)i, specs[i]) || changed;
-    }
-    muted(c, TextFormat("Clic sur une cellule : bundle on/off (%d imposés)", (int)a.P.bundleAt.size()));
-    if (!a.P.bundleAt.empty() && GuiButton(c.row(bh), "Oublier les bundles imposés")) {
-      a.P.bundleAt.clear();
-      a.T.P.bundleAt.clear();
-      say("Bundles imposés oubliés (effet à la prochaine régénération)");
+      if (open) {
+        changed = paramWidget(c, (int)i, specs[i]) || changed;
+      }
+      bool last = i + 1 == specs.size() || std::strcmp(group, specs[i + 1].group) != 0;
+      if (open && last && std::strcmp(group, "Bundles") == 0) {
+        muted(c, TextFormat("Clic sur une cellule : bundle on/off (%d imposés)", (int)a.P.bundleAt.size()));
+        if (!a.P.bundleAt.empty() && GuiButton(c.row(bh), "Oublier les bundles imposés")) {
+          a.P.bundleAt.clear();
+          a.T.P.bundleAt.clear();
+          say("Bundles imposés oubliés (effet à la prochaine régénération)");
+        }
+      }
     }
     if (changed) {
       applyParams();
@@ -809,8 +926,7 @@ static void drawPanel(float W, float H) {
   }
 
   // --- Affichage
-  section(c, "AFFICHAGE");
-  {
+  if (section(c, "affichage", "AFFICHAGE", sv)) {
     std::string items;
     for (int i = 0; i < N_COLOR_FIELDS; i++) {
       items += std::string(i ? ";" : "") + COLOR_FIELDS[i].name;
@@ -835,16 +951,14 @@ static void drawPanel(float W, float H) {
   }
 
   // --- Métriques
-  section(c, "MÉTRIQUES");
-  {
+  if (section(c, "metriques", "MÉTRIQUES", sv)) {
     const auto items = a.MT.items();
-    std::string names;
     for (size_t i = 0; i < items.size(); i++) {
       const char *v = TextFormat("%.4g", items[i].second);
       bool sel = (int)i == a.plotMetric;
       Rectangle r = c.row((float)cfgFontSize + 2, 0);
-      if (CheckCollisionPointRec(GetMousePosition(), r) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
-          CheckCollisionPointRec(GetMousePosition(), sv)) {
+      if (a.popup == POPUP_NONE && CheckCollisionPointRec(GetMousePosition(), r) &&
+          IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(GetMousePosition(), sv)) {
         a.plotMetric = (int)i;
       }
       if (sel) {
@@ -860,35 +974,6 @@ static void drawPanel(float W, float H) {
     muted(c, "Côtés des cellules intérieures");
     drawSidesHistogram(c.row(90, 8));
   }
-
-  // --- Fichiers
-  section(c, "FICHIERS");
-  {
-    Rectangle r = c.row(bh);
-    GuiSetStyle(TEXTBOX, TEXT_ALIGNMENT, TEXT_ALIGN_LEFT);
-    if (GuiTextBox(r, a.file, sizeof(a.file), a.editing == -2)) {
-      a.editing = a.editing == -2 ? -1 : -2;
-    }
-    GuiSetStyle(TEXTBOX, TEXT_ALIGNMENT, TEXT_ALIGN_RIGHT);
-    Rectangle b = c.row(bh);
-    float w = (b.width - 8) / 3;
-    if (GuiButton({b.x, b.y, w, bh}, "Enregistrer")) {
-      saveAll();
-    }
-    if (GuiButton({b.x + w + 4, b.y, w, bh}, "Charger")) {
-      loadFile(a.file);
-    }
-    if (GuiButton({b.x + 2 * (w + 4), b.y, w, bh}, "Paramètres")) {
-      saveParams();
-    }
-    muted(c, "Enregistrer : cellules + SVG ; Paramètres : _params.txt");
-    muted(c, "Glisser-déposer : fichier de cellules ou de paramètres");
-  }
-
-  // --- Aide
-  section(c, "CLAVIER");
-  muted(c, "Espace lancer/pause   S ou -> un pas   R régénérer");
-  muted(c, "F recadrer   T thème   Ctrl+S enregistrer");
   c.y += 8;
 
   a.contentH = c.y - y0;
@@ -896,8 +981,172 @@ static void drawPanel(float W, float H) {
 }
 
 // ================================================================================================
+// Fenêtres surgissantes (actions peu fréquentes)
+// ================================================================================================
+
+// Cadre d'une fenêtre centrée ; renvoie false si elle vient d'être fermée
+static bool popupFrame(Rectangle &r, const char *title, float w, float h) {
+  float W = (float)GetScreenWidth(), H = (float)GetScreenHeight();
+  r = {std::floor(0.5f * (W - w)), std::floor(0.5f * (H - h)), w, h};
+  DrawRectangle(0, 0, (int)W, (int)H, Fade(BLACK, 0.35f));
+  if (GuiWindowBox(r, title)) {
+    app.popup = POPUP_NONE;
+    app.editing = -1;
+    return false;
+  }
+  return true;
+}
+
+static void popupTitle(Cursor &c, const char *t) {
+  c.y += 6;
+  uiText(t, c.x, c.y, (float)cfgFontSize, COL_ACCENT);
+  c.y += cfgFontSize + 4;
+}
+
+static void drawFilesPopup() {
+  App &a = app;
+  Rectangle r;
+  if (!popupFrame(r, "Fichiers et exports", 560, 470)) {
+    return;
+  }
+  float bh = (float)cfgFontSize + 8;
+  Cursor c{r.x + 16, r.y + 34, r.width - 32};
+
+  popupTitle(c, "Fichier de cellules (relisible, reprise des itérations)");
+  textField(c.row(bh), a.file, sizeof(a.file), EDIT_FILE);
+  {
+    Rectangle b = c.row(bh);
+    float w = (b.width - 4) / 2;
+    if (GuiButton({b.x, b.y, w, bh}, "Enregistrer les cellules")) {
+      saveCellsFile();
+    }
+    if (GuiButton({b.x + w + 4, b.y, w, bh}, "Charger (cellules ou paramètres)")) {
+      loadFile(a.file);
+    }
+  }
+  muted(c, "Un fichier peut aussi être glissé-déposé dans la fenêtre.");
+
+  popupTitle(c, "Vue SVG");
+  textField(c.row(bh), a.svgFile, sizeof(a.svgFile), EDIT_SVG);
+  {
+    Rectangle o = c.row(bh, 6);
+    GuiCheckBox({o.x, o.y + 4, 16, 16}, "Germes", &a.svgSeeds);
+    GuiCheckBox({o.x + 110, o.y + 4, 16, 16}, "Légende", &a.svgLegend);
+    GuiLabel({o.x + 230, o.y, 110, bh}, "Largeur (px)");
+    if (GuiValueBox({o.x + o.width - 100, o.y, 100, bh}, nullptr, &a.svgWidth, 100, 20000,
+                    a.editing == EDIT_SVG_WIDTH)) {
+      a.editing = a.editing == EDIT_SVG_WIDTH ? -1 : EDIT_SVG_WIDTH;
+    }
+    Rectangle t = c.row(bh);
+    int idx = a.svgDark ? 1 : 0;
+    GuiToggleGroup({t.x, t.y, (t.width - 2) / 2, bh}, "Noir sur blanc;Blanc sur noir", &idx);
+    a.svgDark = idx == 1;
+    if (GuiButton(c.row(bh), "Exporter le SVG")) {
+      exportSVG(a.svgFile, a.svgDark);
+    }
+  }
+
+  popupTitle(c, "Image PNG de la vue (telle qu'affichée)");
+  textField(c.row(bh), a.pngFile, sizeof(a.pngFile), EDIT_PNG);
+  if (GuiButton(c.row(bh), "Capturer la vue")) {
+    a.capturePending = a.pngFile;
+    a.popup = POPUP_NONE; // capture à la prochaine image, sans la fenêtre
+    a.editing = -1;
+  }
+
+  popupTitle(c, "Paramètres (relisibles par cellyod et cellyod-gui)");
+  textField(c.row(bh), a.paramsFile, sizeof(a.paramsFile), EDIT_PARAMS);
+  if (GuiButton(c.row(bh), "Exporter les paramètres")) {
+    exportParams(a.paramsFile);
+  }
+}
+
+static void drawPrefsPopup() {
+  Rectangle r;
+  if (!popupFrame(r, "Préférences", 420, 200)) {
+    return;
+  }
+  Cursor c{r.x + 16, r.y + 40, r.width - 32};
+  float h = (float)cfgFontSize + 4;
+  Rectangle l = c.row(h, 2);
+  GuiLabel({l.x, l.y, l.width - 60, h}, "Taille de police");
+  uiText(TextFormat("%d", cfgFontSize), l.x + l.width - 30, l.y + 2, (float)cfgFontSize, COL_TEXT);
+  float fs = (float)cfgFontSize;
+  GuiSliderBar(c.row(12, 12), nullptr, nullptr, &fs, 12.0f, 24.0f);
+  cfgFontSize = (int)std::lround(fs);
+  l = c.row(h, 2);
+  GuiLabel({l.x, l.y, l.width - 60, h}, "Largeur du panneau (px)");
+  uiText(TextFormat("%d", cfgPanelW), l.x + l.width - 40, l.y + 2, (float)cfgFontSize, COL_TEXT);
+  float pw = (float)cfgPanelW;
+  GuiSliderBar(c.row(12, 12), nullptr, nullptr, &pw, 280.0f, 600.0f);
+  cfgPanelW = (int)std::lround(pw);
+  if (GuiButton(c.row((float)cfgFontSize + 8), "Valeurs par défaut")) {
+    cfgFontSize = 16;
+    cfgPanelW = 330;
+  }
+  muted(c, "Conservées dans cellyod-gui.ini (répertoire courant).");
+  GuiSetStyle(DEFAULT, TEXT_SIZE, cfgFontSize);
+}
+
+static void drawHelpPopup() {
+  Rectangle r;
+  if (!popupFrame(r, "Aide", 560, 440)) {
+    return;
+  }
+  Cursor c{r.x + 16, r.y + 34, r.width - 32};
+  struct Line {
+    const char *key, *what;
+  };
+  auto table = [&](const char *title, std::initializer_list<Line> lines) {
+    popupTitle(c, title);
+    for (const Line &l : lines) {
+      uiText(l.key, c.x, c.y, (float)cfgFontSize, COL_TEXT);
+      uiText(l.what, c.x + 150, c.y, (float)cfgFontSize, COL_TEXT);
+      c.y += cfgFontSize + 4;
+    }
+  };
+  table("Clavier", {{"Espace", "lancer / mettre en pause les itérations"},
+                    {"S ou ->", "une itération"},
+                    {"R", "régénérer les germes (itération 0)"},
+                    {"F", "recadrer la vue"},
+                    {"T", "thème : noir sur blanc / blanc sur noir"},
+                    {"Ctrl+S", "enregistrer cellules + SVG"},
+                    {"E / H", "fenêtres Fichiers / Aide"},
+                    {"Échap", "fermer une fenêtre"}});
+  table("Souris (vue)", {{"Molette", "zoom autour du pointeur"},
+                         {"Glisser", "déplacer la vue (tout bouton)"},
+                         {"Clic gauche", "bundle on/off sur la cellule"}});
+  table("Panneau", {{"En-têtes", "clic pour replier / déplier une section"},
+                    {"Valeurs", "clic pour saisir, Entrée pour valider"},
+                    {"*", "paramètre qui régénère les germes"}});
+  muted(c, "Survoler un paramètre affiche son aide dans la barre d'état.");
+  muted(c, "Documentation : doc/tutorial_cellyod.tex.");
+}
+
+static void drawPopup() {
+  switch (app.popup) {
+  case POPUP_FILES: drawFilesPopup(); break;
+  case POPUP_PREFS: drawPrefsPopup(); break;
+  case POPUP_HELP: drawHelpPopup(); break;
+  default: break;
+  }
+}
+
+// ================================================================================================
 // Configuration persistante
 // ================================================================================================
+
+// Identifiants des sections repliables (mémorisées dans le fichier de configuration)
+static std::vector<std::string> foldIds() {
+  std::vector<std::string> ids = {"simulation", "parametres", "affichage", "metriques"};
+  for (const auto &s : paramSpecs()) {
+    std::string id = std::string("groupe_") + s.group;
+    if (std::find(ids.begin(), ids.end(), id) == ids.end()) {
+      ids.push_back(id);
+    }
+  }
+  return ids;
+}
 
 static void loadConfig() {
   if (!FileExists(CONFIG_FILE)) {
@@ -914,6 +1163,12 @@ static void loadConfig() {
   app.colorField = std::clamp(rini_get_value_fallback(ini, "color_field", app.colorField), 0, N_COLOR_FIELDS - 1);
   app.speed = std::max(1, rini_get_value_fallback(ini, "speed", app.speed));
   app.stopAtTarget = rini_get_value_fallback(ini, "stop_at_target", app.stopAtTarget) != 0;
+  app.svgSeeds = rini_get_value_fallback(ini, "svg_seeds", app.svgSeeds) != 0;
+  app.svgLegend = rini_get_value_fallback(ini, "svg_legend", app.svgLegend) != 0;
+  app.svgWidth = rini_get_value_fallback(ini, "svg_width", app.svgWidth);
+  for (const std::string &id : foldIds()) {
+    app.folded[id] = rini_get_value_fallback(ini, ("fold_" + id).c_str(), 0) != 0;
+  }
   rini_unload(&ini);
 }
 
@@ -929,6 +1184,12 @@ static void saveConfig() {
   rini_set_value(&ini, "color_field", app.colorField, "Champ de coloration (0 uni, 1 côtés, 2 aire, 3 SI)");
   rini_set_value(&ini, "speed", app.speed, "Itérations par image");
   rini_set_value(&ini, "stop_at_target", app.stopAtTarget, "Arrêt à lloydIterations (0/1)");
+  rini_set_value(&ini, "svg_seeds", app.svgSeeds, "Export SVG : germes (0/1)");
+  rini_set_value(&ini, "svg_legend", app.svgLegend, "Export SVG : légende (0/1)");
+  rini_set_value(&ini, "svg_width", app.svgWidth, "Export SVG : largeur (px)");
+  for (const std::string &id : foldIds()) {
+    rini_set_value(&ini, ("fold_" + id).c_str(), app.folded[id], "Section repliée (0/1)");
+  }
   rini_save(ini, CONFIG_FILE);
   rini_unload(&ini);
 }
@@ -938,10 +1199,12 @@ static void saveConfig() {
 // ================================================================================================
 
 int main(int argc, char *argv[]) {
-  std::string input, screenshot;
+  std::string input, screenshot, popup;
   for (int i = 1; i < argc; i++) {
     if (!std::strcmp(argv[i], "--screenshot") && i + 1 < argc) {
       screenshot = argv[++i];
+    } else if (!std::strcmp(argv[i], "--popup") && i + 1 < argc) {
+      popup = argv[++i]; // files, prefs ou help : fenêtre ouverte au démarrage
     } else {
       input = argv[i];
     }
@@ -983,6 +1246,9 @@ int main(int argc, char *argv[]) {
   if (!screenshot.empty()) {
     runToTarget();
   }
+  if (!popup.empty()) {
+    openPopup(popup == "files" ? POPUP_FILES : popup == "prefs" ? POPUP_PREFS : POPUP_HELP);
+  }
 
   int frame = 0;
   while (!WindowShouldClose()) {
@@ -998,8 +1264,17 @@ int main(int argc, char *argv[]) {
       UnloadDroppedFiles(dropped);
     }
 
-    // clavier (hors saisie)
-    if (app.editing == -1) {
+    // Échap : termine une saisie, sinon ferme la fenêtre surgissante
+    if (IsKeyPressed(KEY_ESCAPE)) {
+      if (app.editing != -1) {
+        app.editing = -1;
+      } else {
+        app.popup = POPUP_NONE;
+      }
+    }
+
+    // clavier (hors saisie et hors fenêtre surgissante)
+    if (app.editing == -1 && app.popup == POPUP_NONE) {
       bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL) || IsKeyDown(KEY_LEFT_SUPER) ||
                   IsKeyDown(KEY_RIGHT_SUPER);
       if (IsKeyPressed(KEY_SPACE)) {
@@ -1023,9 +1298,17 @@ int main(int argc, char *argv[]) {
       if (IsKeyPressed(KEY_F)) {
         fitView();
       }
+      if (IsKeyPressed(KEY_E)) {
+        openPopup(POPUP_FILES);
+      }
+      if (IsKeyPressed(KEY_H)) {
+        openPopup(POPUP_HELP);
+      }
     }
 
-    handleViewInput();
+    if (app.popup == POPUP_NONE) {
+      handleViewInput();
+    }
 
     // simulation : au plus 'speed' itérations par image, dans un budget de temps
     if (app.playing) {
@@ -1047,13 +1330,30 @@ int main(int argc, char *argv[]) {
     ClearBackground(COL_PANEL);
     float W = (float)GetScreenWidth(), H = (float)GetScreenHeight();
     drawTissue();
+    if (!app.capturePending.empty()) {
+      // capture de la vue seule (avant le panneau et les fenêtres)
+      rlDrawRenderBatchActive();
+      Image img = LoadImageFromScreen();
+      Vector2 sc = GetWindowScaleDPI();
+      ImageCrop(&img, {app.view.x * sc.x, app.view.y * sc.y, app.view.width * sc.x, app.view.height * sc.y});
+      if (ExportImage(img, app.capturePending.c_str())) {
+        say("Vue capturée : " + app.capturePending);
+      } else {
+        say("impossible d'écrire " + app.capturePending, true);
+      }
+      UnloadImage(img);
+      app.capturePending.clear();
+    }
+    if (app.popup != POPUP_NONE) {
+      GuiLock(); // le panneau est inactif tant qu'une fenêtre est ouverte
+    }
     drawPanel(W, H);
 
     // barre d'état : aide du paramètre survolé, informations de la cellule survolée, ou dernier message
     Rectangle bar{0, H - 28, W - cfgPanelW, 28};
     DrawRectangleRec(bar, {248, 249, 250, 255});
     DrawLineEx({0, bar.y}, {bar.width, bar.y}, 1.0f, COL_PANEL_EDGE);
-    std::string info = app.hoverHelp.empty() ? hoverInfo() : app.hoverHelp;
+    std::string info = app.popup != POPUP_NONE ? "" : app.hoverHelp.empty() ? hoverInfo() : app.hoverHelp;
     bool err = false;
     if (info.empty()) {
       info = app.message;
@@ -1063,6 +1363,8 @@ int main(int argc, char *argv[]) {
       info = TextFormat("%zu cellules, %zu bundles", app.MT.nCells, app.MT.nBundles);
     }
     uiText(info.c_str(), 10, bar.y + 5, (float)cfgFontSize, err ? COL_ERROR : COL_TEXT);
+    GuiUnlock();
+    drawPopup();
     EndDrawing();
 
     if (!screenshot.empty() && ++frame == 3) {

@@ -579,8 +579,8 @@ illimité) et se convertit en PNG avec Inkscape :
 \begin{figure}[H]
   \centering
   \includegraphics[width=\linewidth]{figures/gui.png}
-  \caption{\cyg{} avec \code{examples/rein.txt}. À gauche la vue, à droite le panneau (qui défile), en bas la
-    barre d'état.}
+  \caption{\cyg{} avec \code{examples/rein.txt}. À gauche la vue, à droite le panneau (barre d'actions en haut,
+    sections repliables qui défilent), en bas la barre d'état.}
   \label{fig:gui}
 \end{figure}
 
@@ -589,7 +589,10 @@ déplacement sur une cellule : bundle on/off. La barre d'état donne les coordon
 (numéro, nombre de côtés, aire, indice de forme), l'aide du paramètre survolé dans le panneau, ou le dernier
 message (erreurs en rouge).
 
-\textbf{Panneau.}
+\textbf{Panneau.} Il est découpé en sections \emph{repliables} : un clic sur un en-tête (triangle) replie ou
+déplie la section ; chaque groupe de paramètres (\emph{Domaine}, \emph{Germes}, \emph{Lloyd}, \emph{Bundles}) se
+replie aussi. L'état des sections est mémorisé d'une session à l'autre, ce qui permet de ne garder ouvert que ce
+qu'on règle.
 \begin{itemize}
   \item \emph{Simulation} : \emph{Lancer/Pause} (Espace), \emph{Pas} (S ou $\rightarrow$, une itération),
     \emph{Régénérer} (R, retour à l'itération 0 avec de nouveaux germes), \emph{Calcul direct} (sans animation,
@@ -606,13 +609,33 @@ message (erreurs en rouge).
     aussi au SVG écrit par \emph{Enregistrer} ; \emph{Recadrer} (F).
   \item \emph{Métriques} : valeurs courantes ; un clic sur une métrique trace son évolution en fonction de
     l'itération depuis la dernière régénération ; histogramme du nombre de côtés.
-  \item \emph{Fichiers} : nom du fichier de cellules ; \emph{Enregistrer} (Ctrl+S) écrit ce fichier et le SVG de
-    même nom ; \emph{Charger} relit un fichier de cellules ou de paramètres ; \emph{Paramètres} écrit
-    \code{<nom>\_params.txt}. Un fichier peut aussi être glissé-déposé dans la fenêtre.
 \end{itemize}
-Les réglages d'affichage (taille de fenêtre, police, coloration, thème, vitesse\dots) sont conservés dans
-\code{cellyod-gui.ini}, dans le répertoire courant. \code{cellyod-gui fichier --screenshot image.png} calcule
-jusqu'à \code{lloydIterations}, enregistre une capture et quitte (utilisé pour la figure~\ref{fig:gui}).
+
+\textbf{Fenêtres surgissantes.} Les actions moins fréquentes sont regroupées dans des fenêtres ouvertes par la barre
+en haut du panneau ; tant qu'une fenêtre est ouverte, le panneau et la vue sont inactifs (Échap ou la croix pour
+fermer).
+\begin{itemize}
+  \item \emph{Fichiers\dots} (touche E, figure~\ref{fig:guifiles}) : nom du fichier de cellules, \emph{Enregistrer les
+    cellules} et \emph{Charger} (fichier de cellules ou de paramètres ; un fichier peut aussi être glissé-déposé
+    dans la fenêtre) ; export SVG avec son nom, l'affichage des germes et de la légende, la largeur en pixels et le
+    thème (initialisé à celui de la vue) ; capture PNG de la vue telle qu'affichée ; export des paramètres. Les noms
+    d'export sont déduits du fichier de cellules à l'ouverture de la fenêtre. Ctrl+S enregistre directement le
+    fichier de cellules et le SVG de même nom, au thème de la vue ;
+  \item \emph{Préférences\dots} : taille de police et largeur du panneau ;
+  \item \emph{Aide\dots} (touche H) : rappel du clavier, de la souris et du fonctionnement du panneau.
+\end{itemize}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.8\linewidth]{figures/gui_files.png}
+  \caption{Fenêtre \emph{Fichiers et exports}.}
+  \label{fig:guifiles}
+\end{figure}
+Les réglages d'affichage (taille de fenêtre, police, coloration, thème, vitesse\dots), les options d'export et
+l'état des sections sont conservés dans \code{cellyod-gui.ini}, dans le répertoire courant.
+\code{cellyod-gui fichier --screenshot image.png} calcule jusqu'à \code{lloydIterations}, enregistre une capture
+et quitte ; \code{--popup files|prefs|help} ouvre une fenêtre au démarrage (figures~\ref{fig:gui} et
+\ref{fig:guifiles}).
 
 \textbf{Démarche conseillée.} (1) Régler le domaine et la forme avec $\alpha=0$ et quelques itérations ;
 (2) choisir \code{bundleFraction} ; (3) lancer l'animation et ajuster $\alpha$, $K$ et l'angle en regardant le tissu

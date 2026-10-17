@@ -57,6 +57,8 @@ W=600 fig rein_beta0 Lx=46 Ly=46 "shape=r - 20 + 4.5*exp(-t^2/0.12)" beta=0 latt
 # 6. Interface graphique (capture)
 ( cd work && rm -f cellyod-gui.ini && ../../cellyod-gui ../../examples/rein.txt --screenshot gui.png )
 cp work/gui.png figures/gui.png
+( cd work && ../../cellyod-gui ../../examples/tissu.txt --popup files --screenshot gui_files.png )
+magick work/gui_files.png -crop 600x500+340+160 +repage figures/gui_files.png
 
 # 7. Données : métriques en fonction des itérations et de alpha (pgfplots)
 hdr() { sed -e '1s/^# //' "$1" > "$2"; }

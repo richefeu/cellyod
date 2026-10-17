@@ -70,7 +70,8 @@ cd doc && ./make_figures.sh && latexmk -lualatex tutorial_cellyod.tex   # -> doc
 ./cellyod-gui examples/tissu.txt       # fichier de paramètres ou de cellules
 ```
 
-Le tissu évolue en direct, itération par itération. Le panneau de droite contient :
+Le tissu évolue en direct, itération par itération. Le panneau de droite est découpé en sections
+**repliables** (clic sur l'en-tête, y compris pour chaque groupe de paramètres ; l'état est mémorisé) :
 
 - **Simulation** : lancer/pause, une itération, régénérer, calcul direct jusqu'à `lloydIterations`, arrêt
   automatique à `lloydIterations`, nombre d'itérations par image ;
@@ -84,17 +85,25 @@ Le tissu évolue en direct, itération par itération. Le panneau de droite cont
   ou **blanc sur noir**, également appliqué au SVG enregistré. Le bord du tissu est tracé en trait épais ;
 - **Métriques** : valeurs courantes ; un clic sur une métrique trace son évolution en fonction de l'itération ;
   histogramme du nombre de côtés ;
-- **Fichiers** : enregistrer le fichier de cellules et son SVG, recharger, exporter les paramètres
+Les actions moins fréquentes sont dans des **fenêtres surgissantes**, ouvertes depuis la barre en haut du
+panneau (Échap pour fermer) :
+
+- **Fichiers...** (touche E) : enregistrer ou charger un fichier de cellules (ou de paramètres) ; exporter le SVG
+  (nom, germes, légende, largeur en pixels, thème) ; capturer la vue en PNG ; exporter les paramètres
   (`<nom>_params.txt`, relisible par `cellyod`). Un fichier de cellules ou de paramètres peut aussi être
-  glissé-déposé dans la fenêtre.
+  glissé-déposé dans la fenêtre ;
+- **Préférences...** : taille de police, largeur du panneau ;
+- **Aide...** (touche H) : clavier, souris, panneau.
 
 Dans la vue : clic gauche sur une cellule pour en faire un bundle (ou l'inverse), glisser pour déplacer, molette
 pour zoomer. Les bundles ajoutés à la souris sont mémorisés comme bundles imposés (`bundle x y`) : ils sont
 gardés à la régénération et enregistrés avec les paramètres.
 
-Clavier : Espace lancer/pause, S ou → une itération, R régénérer, F recadrer, T thème, Ctrl+S enregistrer.
+Clavier : Espace lancer/pause, S ou → une itération, R régénérer, F recadrer, T thème, Ctrl+S enregistrer
+(cellules + SVG), E fichiers et exports, H aide, Échap fermer une fenêtre.
 
-Les réglages d'affichage sont conservés dans `cellyod-gui.ini` (répertoire courant).
+Les réglages d'affichage, les options d'export et l'état des sections sont conservés dans `cellyod-gui.ini`
+(répertoire courant).
 
 ## Algorithme
 
