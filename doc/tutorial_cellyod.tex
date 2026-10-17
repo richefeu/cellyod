@@ -563,8 +563,11 @@ relançant \cy{} avec des paramètres différents et le même fichier (section~\
 
 \subsection{SVG}
 
-Vue vectorielle du tissu, dans le même style que l'interface : cellules sombres, parois blanches, bord du tissu
-épais, germes gris cerclés, bundles en rouge saumon, légende. \code{svgSeeds 0} retire les germes,
+Vue vectorielle du tissu, dans le même style que l'interface : parois fines, bord du tissu épais, germes gris
+cerclés, bundles en rouge, légende. Deux thèmes : \code{svgTheme light} (défaut, noir sur blanc : cellules blanches,
+parois noires) et \code{svgTheme dark} (blanc sur noir : cellules sombres sur fond noir, parois blanches) ; les
+couleurs des deux thèmes sont définies dans \code{src/theme.hpp}, commun au SVG et à l'interface.
+\code{svgSeeds 0} retire les germes,
 \code{svgLegend 0} la légende ; \code{svg none} supprime le fichier. Un SVG s'ouvre dans un navigateur (zoom
 illimité) et se convertit en PNG avec Inkscape :
 \code{inkscape cells.svg --export-type=png -w 2000}.
@@ -599,14 +602,15 @@ message (erreurs en rouge).
     suivante (section~\ref{sec:effets}).
   \item \emph{Affichage} : \emph{Uni} (rendu de la figure~\ref{fig:gui}), ou coloration par nombre de côtés
     (palette discrète ; les cellules de bord sont estompées), par aire ou par indice de forme (palette continue,
-    échelle min--max affichée) ; germes et parois ; \emph{Recadrer} (F).
+    échelle min--max affichée) ; germes et parois ; thème \emph{Noir sur blanc} (défaut) ou \emph{Blanc sur noir} (touche T), appliqué
+    aussi au SVG écrit par \emph{Enregistrer} ; \emph{Recadrer} (F).
   \item \emph{Métriques} : valeurs courantes ; un clic sur une métrique trace son évolution en fonction de
     l'itération depuis la dernière régénération ; histogramme du nombre de côtés.
   \item \emph{Fichiers} : nom du fichier de cellules ; \emph{Enregistrer} (Ctrl+S) écrit ce fichier et le SVG de
     même nom ; \emph{Charger} relit un fichier de cellules ou de paramètres ; \emph{Paramètres} écrit
     \code{<nom>\_params.txt}. Un fichier peut aussi être glissé-déposé dans la fenêtre.
 \end{itemize}
-Les réglages d'affichage (taille de fenêtre, police, coloration, vitesse\dots) sont conservés dans
+Les réglages d'affichage (taille de fenêtre, police, coloration, thème, vitesse\dots) sont conservés dans
 \code{cellyod-gui.ini}, dans le répertoire courant. \code{cellyod-gui fichier --screenshot image.png} calcule
 jusqu'à \code{lloydIterations}, enregistre une capture et quitte (utilisé pour la figure~\ref{fig:gui}).
 
@@ -658,6 +662,7 @@ itération, plus la recherche du bundle le plus proche, proportionnelle au nombr
   Fichier & Rôle \\
   \midrule
   \code{src/geom.hpp} & vecteur \code{V}, polygones : aire signée, périmètre, centroïde \\
+  \code{src/theme.hpp} & thèmes de rendu (noir sur blanc, blanc sur noir), communs au SVG et à l'interface \\
   \code{src/expr.hpp/.cpp} & analyseur d'expressions (descente récursive vers une notation polonaise inverse,
     évaluée sur une pile) \\
   \code{src/params.hpp/.cpp} & structure \code{Params} et registre \code{paramSpecs()} ; lecture et écriture des

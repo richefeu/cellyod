@@ -57,6 +57,7 @@ int main(int argc, char *argv[]) {
       SvgOptions so;
       so.seeds = P.svgSeeds;
       so.legend = P.svgLegend;
+      so.dark = P.svgDark;
       writeSVG(P.svg, t, m, so);
     }
     if (!P.morphology.empty()) {

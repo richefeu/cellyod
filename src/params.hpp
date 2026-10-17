@@ -40,6 +40,7 @@ struct Params {
   std::string output{"cells.txt"};
   std::string svg{"cells.svg"};
   bool svgSeeds{true}, svgLegend{true}; // SVG : germes, légende des bundles
+  bool svgDark{false};                  // SVG : blanc sur noir (défaut : noir sur blanc)
   std::string morphology; // fichier auquel une ligne de métriques est ajoutée (balayages)
 };
 

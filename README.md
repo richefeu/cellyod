@@ -79,9 +79,9 @@ Le tissu évolue en direct, itération par itération. Le panneau de droite cont
   anisotropie, `bundleMotion`, `lloydIterations`) s'appliquent dès l'itération suivante, sans repartir de zéro.
   L'aide d'un paramètre s'affiche dans la barre d'état quand la souris le survole. L'expression `shape` se
   saisit dans un champ (Entrée pour valider ; une expression invalide est signalée dans la barre d'état) ;
-- **Affichage** : rendu uniforme (cellules sombres, parois blanches, germes gris, bundles en rouge saumon, comme
-  le SVG), ou coloration par nombre de côtés, par aire ou par indice de forme ; germes et parois. Le bord du
-  tissu est tracé en trait épais ;
+- **Affichage** : rendu uniforme (parois, germes gris cerclés, bundles en rouge, comme le SVG), ou coloration
+  par nombre de côtés, par aire ou par indice de forme ; germes et parois ; thème **noir sur blanc** (défaut)
+  ou **blanc sur noir**, également appliqué au SVG enregistré. Le bord du tissu est tracé en trait épais ;
 - **Métriques** : valeurs courantes ; un clic sur une métrique trace son évolution en fonction de l'itération ;
   histogramme du nombre de côtés ;
 - **Fichiers** : enregistrer le fichier de cellules et son SVG, recharger, exporter les paramètres
@@ -92,7 +92,7 @@ Dans la vue : clic gauche sur une cellule pour en faire un bundle (ou l'inverse)
 pour zoomer. Les bundles ajoutés à la souris sont mémorisés comme bundles imposés (`bundle x y`) : ils sont
 gardés à la régénération et enregistrés avec les paramètres.
 
-Clavier : Espace lancer/pause, S ou → une itération, R régénérer, F recadrer, Ctrl+S enregistrer.
+Clavier : Espace lancer/pause, S ou → une itération, R régénérer, F recadrer, T thème, Ctrl+S enregistrer.
 
 Les réglages d'affichage sont conservés dans `cellyod-gui.ini` (répertoire courant).
 
@@ -152,6 +152,7 @@ valeur du fichier.
 | `output` | cells.txt | fichier de cellules produit |
 | `svg` | cells.svg | vue SVG (`none` : pas de SVG) |
 | `svgSeeds`, `svgLegend` | 1, 1 | SVG : afficher les germes, la légende des bundles |
+| `svgTheme` | light | SVG : `light` (noir sur blanc) ou `dark` (blanc sur noir) |
 | `morphology` | — | ajoute une ligne de paramètres et de métriques au fichier (balayages) |
 
 Σ = K a aᵀ + b bᵀ, avec a la direction des colonnes et b sa perpendiculaire. Toute matrice définie positive
@@ -194,6 +195,7 @@ bords compris :
 | Fichier | Rôle |
 |---|---|
 | `src/geom.hpp` | vecteurs, polygones (aire, centroïde) |
+| `src/theme.hpp` | thèmes de rendu, communs au SVG et à l'interface |
 | `src/expr.hpp/.cpp` | expressions numériques (forme du domaine) |
 | `src/params.hpp/.cpp` | paramètres et leur registre (`paramSpecs()`) |
 | `src/tissue.hpp/.cpp` | domaine et découpe par la forme, germes, Voronoï, itérations, sommets partagés, métriques |

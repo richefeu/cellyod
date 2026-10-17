@@ -16,6 +16,7 @@
 // où elles s'étaient arrêtées (le pavage est entièrement déterminé par les germes).
 #pragma once
 
+#include "theme.hpp"
 #include "tissue.hpp"
 
 #include <string>
@@ -28,6 +29,7 @@ struct SvgOptions {
   double widthPx{1000.0};
   bool seeds{true};
   bool legend{true};
+  bool dark{false}; // blanc sur noir (défaut : noir sur blanc), cf. theme.hpp
 };
 void writeSVG(const std::string &file, const Tissue &t, const CellMesh &m, const SvgOptions &opt = {});
 

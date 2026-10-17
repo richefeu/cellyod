@@ -6,7 +6,8 @@
 //
 // Souris (vue)  : clic gauche = bundle on/off sur la cellule ; glisser (gauche, droit ou milieu) = déplacer ;
 //                 molette = zoom
-// Clavier       : Espace lancer/pause, S ou -> une itération, R régénérer, F recadrer, Ctrl+S enregistrer
+// Clavier       : Espace lancer/pause, S ou -> une itération, R régénérer, F recadrer, T thème (noir sur blanc ou
+//                 blanc sur noir, aussi pour le SVG enregistré), Ctrl+S enregistrer
 //
 // Usage : cellyod-gui [params.txt | cells.txt]
 //         cellyod-gui [fichier] --screenshot image.png    (calcule, enregistre une capture et quitte)
@@ -37,13 +38,7 @@
 // Thème et configuration
 // ================================================================================================
 
-// Vue : cellules sombres, parois blanches, germes gris, bundles rouge saumon (même style que le SVG, io.cpp)
-static const Color COL_BG = {0, 0, 0, 255};             // fond de la vue
-static const Color COL_CELL = {15, 17, 26, 255};        // cellules
-static const Color COL_EDGE = {242, 242, 245, 255};     // parois
-static const Color COL_SEED = {142, 143, 156, 255};     // germes
-static const Color COL_SEED_RING = {201, 202, 211, 255};
-static const Color COL_BUNDLE = {240, 116, 112, 255};   // bundles
+// Les couleurs de la vue viennent du thème de rendu (src/theme.hpp, commun avec le SVG) : voir col()
 static const Color COL_PANEL = {255, 255, 255, 255};
 static const Color COL_PANEL_EDGE = {221, 225, 230, 255};
 static const Color COL_TEXT = {43, 47, 54, 255};
@@ -158,6 +153,7 @@ struct App {
   double zoom{10.0};
   V center;
   bool showSeeds{true}, showEdges{true};
+  bool dark{false}; // thème de la vue : blanc sur noir (défaut : noir sur blanc)
   int colorField{0};
   bool dragging{false};
   Vector2 pressPos{};
@@ -175,6 +171,12 @@ struct App {
 };
 
 static App app;
+
+// Couleur du thème de rendu courant (0xRRGGBB, cf. theme.hpp)
+static Color col(uint32_t rgb, float alpha = 1.0f) {
+  return {(unsigned char)(rgb >> 16), (unsigned char)(rgb >> 8), (unsigned char)rgb, (unsigned char)(255 * alpha)};
+}
+static const Theme &theme() { return renderTheme(app.dark); }
 
 static void say(const std::string &m, bool error = false) {
   app.message = m;
@@ -327,7 +329,9 @@ static void saveAll() {
       refresh();
     }
     saveCells(f, a.T, a.M);
-    writeSVG(stem(f) + ".svg", a.T, a.M);
+    SvgOptions so;
+    so.dark = a.dark;
+    writeSVG(stem(f) + ".svg", a.T, a.M, so);
     say("Enregistré : " + f + " et " + stem(f) + ".svg");
   } catch (const std::exception &e) {
     say(e.what(), true);
@@ -370,7 +374,7 @@ static Color cellColor(size_t c) {
   const App &a = app;
   const ColorField &f = COLOR_FIELDS[a.colorField];
   if (!f.value) {
-    return COL_CELL;
+    return col(theme().cell);
   }
   if (f.discrete) {
     Color col = sidesColor((int)f.value(a.D, c));
@@ -385,7 +389,7 @@ static Color cellColor(size_t c) {
 static void drawTissue() {
   App &a = app;
   BeginScissorMode((int)a.view.x, (int)a.view.y, (int)a.view.width, (int)a.view.height);
-  DrawRectangleRec(a.view, COL_BG);
+  DrawRectangleRec(a.view, col(theme().background));
   rlDisableBackfaceCulling();
   std::vector<Vector2> pts;
   for (size_t c = 0; c < a.M.cells.size(); c++) {
@@ -408,7 +412,7 @@ static void drawTissue() {
   }
   rlEnableBackfaceCulling();
   float th = (float)std::clamp(0.035 * a.zoom, 1.0, 3.0);
-  Color edge = a.colorField == 0 ? COL_EDGE : Color{242, 242, 245, 150};
+  Color edge = col(theme().edge, a.colorField == 0 ? 1.0f : 0.6f);
   if (a.showEdges) {
     for (const auto &cell : a.M.cells) {
       for (size_t k = 0; k < cell.size(); k++) {
@@ -421,14 +425,14 @@ static void drawTissue() {
   }
   // bord du tissu
   for (const auto &e : a.M.boundaryEdges) {
-    DrawLineEx(toScreen(a.M.verts[e.first]), toScreen(a.M.verts[e.second]), 2.0f * th, COL_EDGE);
+    DrawLineEx(toScreen(a.M.verts[e.first]), toScreen(a.M.verts[e.second]), 2.0f * th, col(theme().boundary));
   }
   if (a.showSeeds) {
     float r = (float)std::clamp(0.07 * a.zoom, 1.0, 6.0);
     for (size_t i = 0; i < a.T.seeds.size(); i++) {
       if (a.T.inside(i) && !a.T.isBundle[i]) {
-        DrawCircleV(toScreen(a.T.seeds[i]), r, COL_SEED_RING);
-        DrawCircleV(toScreen(a.T.seeds[i]), 0.7f * r, COL_SEED);
+        DrawCircleV(toScreen(a.T.seeds[i]), r, col(theme().seedRing));
+        DrawCircleV(toScreen(a.T.seeds[i]), 0.7f * r, col(theme().seed));
       }
     }
   }
@@ -436,7 +440,7 @@ static void drawTissue() {
   float rb = (float)std::clamp(0.22 * a.zoom, 2.0, 16.0);
   for (size_t i = 0; i < a.T.seeds.size(); i++) {
     if (a.T.inside(i) && a.T.isBundle[i]) {
-      DrawCircleV(toScreen(a.T.seeds[i]), rb, COL_BUNDLE);
+      DrawCircleV(toScreen(a.T.seeds[i]), rb, col(theme().bundle));
     }
   }
 
@@ -445,24 +449,24 @@ static void drawTissue() {
   float lx = a.view.x + 12, ly = a.view.y + a.view.height - 34;
   if (!f.value && a.MT.nBundles > 0) {
     float bx = a.view.x + a.view.width - 136, by = a.view.y + a.view.height - 44;
-    DrawRectangleRounded({bx, by, 120, 30}, 0.2f, 4, COL_BG);
-    DrawRectangleRoundedLinesEx({bx, by, 120, 30}, 0.2f, 4, 1.5f, COL_EDGE);
-    DrawRectangle((int)bx + 10, (int)by + 9, 28, 13, COL_BUNDLE);
-    uiText("Bundles", bx + 46, by + 5, 18, COL_EDGE);
+    DrawRectangleRounded({bx, by, 120, 30}, 0.2f, 4, col(theme().background));
+    DrawRectangleRoundedLinesEx({bx, by, 120, 30}, 0.2f, 4, 1.5f, col(theme().text));
+    DrawRectangle((int)bx + 10, (int)by + 9, 28, 13, col(theme().bundle));
+    uiText("Bundles", bx + 46, by + 5, 18, col(theme().text));
   } else if (f.value && f.discrete) {
-    DrawRectangle((int)lx - 6, (int)ly - 6, 7 * 34 + 12, 32, ColorAlpha(WHITE, 0.85f));
+    DrawRectangle((int)lx - 6, (int)ly - 6, 7 * 34 + 12, 32, col(theme().background, 0.85f));
     for (int n = 3; n <= 9; n++) {
       float x = lx + (n - 3) * 34;
       DrawRectangle((int)x, (int)ly, 30, 20, sidesColor(n));
       uiText(TextFormat(n == 9 ? "%d+" : "%d", n), x + 8, ly + 1, 16, n >= 7 || n <= 4 ? WHITE : COL_TEXT);
     }
   } else if (f.value) {
-    DrawRectangle((int)lx - 6, (int)ly - 6, 252, 32, ColorAlpha(WHITE, 0.85f));
+    DrawRectangle((int)lx - 6, (int)ly - 6, 252, 32, col(theme().background, 0.85f));
     for (int k = 0; k < 120; k++) {
       DrawRectangle((int)lx + 60 + k, (int)ly, 1, 20, rampColor(k / 119.0));
     }
-    uiText(TextFormat("%.3g", a.vmin), lx, ly + 1, 16, COL_TEXT);
-    uiText(TextFormat("%.3g", a.vmax), lx + 186, ly + 1, 16, COL_TEXT);
+    uiText(TextFormat("%.3g", a.vmin), lx, ly + 1, 16, col(theme().text));
+    uiText(TextFormat("%.3g", a.vmax), lx + 186, ly + 1, 16, col(theme().text));
   }
   EndScissorMode();
 }
@@ -821,6 +825,10 @@ static void drawPanel(float W, float H) {
     Rectangle cb = c.row(16, 8);
     GuiCheckBox({cb.x, cb.y, 16, 16}, "Germes", &a.showSeeds);
     GuiCheckBox({cb.x + cb.width / 2, cb.y, 16, 16}, "Parois", &a.showEdges);
+    Rectangle tr = c.row(bh, 8);
+    int themeIdx = a.dark ? 1 : 0;
+    GuiToggleGroup({tr.x, tr.y, (tr.width - 2) / 2, bh}, "Noir sur blanc;Blanc sur noir", &themeIdx);
+    a.dark = themeIdx == 1;
     if (GuiButton(c.row(bh), "Recadrer (F)")) {
       fitView();
     }
@@ -880,7 +888,7 @@ static void drawPanel(float W, float H) {
   // --- Aide
   section(c, "CLAVIER");
   muted(c, "Espace lancer/pause   S ou -> un pas   R régénérer");
-  muted(c, "F recadrer   Ctrl+S enregistrer");
+  muted(c, "F recadrer   T thème   Ctrl+S enregistrer");
   c.y += 8;
 
   a.contentH = c.y - y0;
@@ -902,6 +910,7 @@ static void loadConfig() {
   cfgFontSize = rini_get_value_fallback(ini, "font_size", cfgFontSize);
   app.showSeeds = rini_get_value_fallback(ini, "show_seeds", app.showSeeds) != 0;
   app.showEdges = rini_get_value_fallback(ini, "show_edges", app.showEdges) != 0;
+  app.dark = rini_get_value_fallback(ini, "dark_theme", app.dark) != 0;
   app.colorField = std::clamp(rini_get_value_fallback(ini, "color_field", app.colorField), 0, N_COLOR_FIELDS - 1);
   app.speed = std::max(1, rini_get_value_fallback(ini, "speed", app.speed));
   app.stopAtTarget = rini_get_value_fallback(ini, "stop_at_target", app.stopAtTarget) != 0;
@@ -916,6 +925,7 @@ static void saveConfig() {
   rini_set_value(&ini, "font_size", cfgFontSize, "Taille de police");
   rini_set_value(&ini, "show_seeds", app.showSeeds, "Afficher les germes (0/1)");
   rini_set_value(&ini, "show_edges", app.showEdges, "Afficher les parois (0/1)");
+  rini_set_value(&ini, "dark_theme", app.dark, "Thème : 0 noir sur blanc, 1 blanc sur noir");
   rini_set_value(&ini, "color_field", app.colorField, "Champ de coloration (0 uni, 1 côtés, 2 aire, 3 SI)");
   rini_set_value(&ini, "speed", app.speed, "Itérations par image");
   rini_set_value(&ini, "stop_at_target", app.stopAtTarget, "Arrêt à lloydIterations (0/1)");
@@ -1006,6 +1016,9 @@ int main(int argc, char *argv[]) {
       if (IsKeyPressed(KEY_R)) {
         regenerate();
         app.playing = app.P.lloydIterations > 0;
+      }
+      if (IsKeyPressed(KEY_T)) {
+        app.dark = !app.dark;
       }
       if (IsKeyPressed(KEY_F)) {
         fitView();
